@@ -21,7 +21,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.denisio04.MAP_LOG"
+      "package": "com.denisio04.MAP_LOG",
+      "config": {
+        "googleMaps": {
+          "apiKey": "TU_API_KEY_AQUI"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
