@@ -22,6 +22,11 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.denisio04.MAP_LOG",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao"
@@ -35,6 +40,15 @@
       "eas": {
         "projectId": "8c661014-0a67-49a5-be2f-132b03f351cb"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La aplicación necesita acceder a tus fotos para guardarlas en las notas.",
+          "cameraPermission": "La aplicación necesita acceder a la cámara para tomar fotos para las notas."
+        }
+      ]
+    ]
   }
 }

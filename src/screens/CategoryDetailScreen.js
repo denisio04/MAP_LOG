@@ -118,8 +118,7 @@ export default function CategoryDetailScreen({ route, navigation }) {
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false, // Desactivado para evitar errores de Google Play Services en APKs
       quality: 0.5,
     });
 
