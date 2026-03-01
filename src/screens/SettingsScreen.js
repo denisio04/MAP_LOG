@@ -102,7 +102,7 @@ export default function SettingsScreen() {
   const handleImportData = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
+        type: ['application/json', '*/*'], // Intentar JSON pero permitir todo si el sistema no lo reconoce bien
         copyToCacheDirectory: true
       });
 
