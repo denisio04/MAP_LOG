@@ -56,6 +56,7 @@ export default function MapScreen({ route }) {
   const [tempCategoryId, setTempCategoryId] = useState(categoryId || null); // Carpeta destino temporal
 
   const [newNoteImage, setNewNoteImage] = useState(null); // URI de la imagen de la nota
+  const [isPhotoChoiceVisible, setIsPhotoChoiceVisible] = useState(false);
 
   // Actualiza los ítems si cambian los parámetros de ruta
   useEffect(() => {
@@ -180,9 +181,30 @@ export default function MapScreen({ route }) {
     }
   };
 
-  // Selecciona una foto de la galería
-  const pickImage = async () => {
-    // Solicitar permisos explícitamente (mejor compatibilidad en APKs)
+  // Función para abrir la cámara
+  const handleCamera = async () => {
+    setIsPhotoChoiceVisible(false);
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      setErrorHeader("ERROR");
+      setErrorMessage("SE REQUIERE PERMISO PARA USAR LA CÁMARA.");
+      setIsErrorModalVisible(true);
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setNewNoteImage(result.assets[0].uri);
+    }
+  };
+
+  // Función para abrir la galería
+  const handleGallery = async () => {
+    setIsPhotoChoiceVisible(false);
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       setErrorHeader("ERROR");
@@ -191,15 +213,19 @@ export default function MapScreen({ route }) {
       return;
     }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false, // Desactivado para evitar errores de Google Play Services en APKs
+      allowsEditing: false,
       quality: 0.7,
     });
 
     if (!result.canceled) {
       setNewNoteImage(result.assets[0].uri);
     }
+  };
+
+  const pickImage = () => {
+    setIsPhotoChoiceVisible(true);
   };
 
   // Limpia el formulario antes de abrir el modal de nota
@@ -440,10 +466,21 @@ export default function MapScreen({ route }) {
         onClose={() => setIsErrorModalVisible(false)}
         title={errorHeader}
         message={errorMessage}
-        actions={[
-          { title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }
-        ]}
+        actions={[{ title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }]}
       />
+
+      {/* Modal para elegir origen de foto */}
+      <BrutalistModal
+        visible={isPhotoChoiceVisible}
+        title="AÑADIR FOTO"
+        onClose={() => setIsPhotoChoiceVisible(false)}
+        actions={[{ title: 'CANCELAR', onPress: () => setIsPhotoChoiceVisible(false) }]}
+      >
+        <View style={{ gap: 10 }}>
+          <BrutalistButton title="📷 CÁMARA" onPress={handleCamera} />
+          <BrutalistButton title="🖼️ GALERÍA" onPress={handleGallery} />
+        </View>
+      </BrutalistModal>
 
       {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */}
       <BrutalistModal

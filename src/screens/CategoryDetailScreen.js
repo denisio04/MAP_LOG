@@ -32,6 +32,7 @@ export default function CategoryDetailScreen({ route, navigation }) {
   // Estados para el modal de borrado
   const [isDeleteModalVisible, setIsDeleteModalVisible] = React.useState(false);
   const [itemToDelete, setItemToDelete] = React.useState(null);
+  const [isPhotoChoiceVisible, setIsPhotoChoiceVisible] = React.useState(false);
 
   // Estados para el modal de edición
   const [isEditModalVisible, setIsEditModalVisible] = React.useState(false);
@@ -114,16 +115,35 @@ export default function CategoryDetailScreen({ route, navigation }) {
     setIsEditModalVisible(true);
   };
 
-  // Función para elegir una foto
-  const pickImage = async () => {
-    // Solicitar permisos explícitamente
+  // Función para abrir la cámara
+  const handleCamera = async () => {
+    setIsPhotoChoiceVisible(false);
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("ERROR", "SE REQUIERE PERMISO PARA USAR LA CÁMARA.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setEditImage(result.assets[0].uri);
+    }
+  };
+
+  // Función para abrir la galería
+  const handleGallery = async () => {
+    setIsPhotoChoiceVisible(false);
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert("ERROR", "SE REQUIERE PERMISO PARA ACCEDER A LAS FOTOS.");
       return;
     }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.7,
@@ -132,6 +152,10 @@ export default function CategoryDetailScreen({ route, navigation }) {
     if (!result.canceled) {
       setEditImage(result.assets[0].uri);
     }
+  };
+
+  const pickImage = () => {
+    setIsPhotoChoiceVisible(true);
   };
 
   // Guarda los cambios realizados en el ítem
@@ -264,11 +288,21 @@ export default function CategoryDetailScreen({ route, navigation }) {
         onClose={() => setIsDeleteModalVisible(false)}
         title="ELIMINAR ÍTEM"
         message={itemToDelete ? `¿SEGURO QUE QUIERES ELIMINAR "${itemToDelete.title.toUpperCase()}"?` : ''}
-        actions={[
-          { title: 'CANCELAR', onPress: () => setIsDeleteModalVisible(false) },
-          { title: 'ELIMINAR', onPress: confirmDeleteItem, primary: true }
-        ]}
+        actions={[{ title: 'BORRAR', onPress: confirmDeleteItem, primary: true }, { title: 'CANCELAR', onPress: () => setIsDeleteModalVisible(false) }]}
       />
+
+      {/* Modal para elegir origen de foto */}
+      <BrutalistModal
+        visible={isPhotoChoiceVisible}
+        title="AÑADIR FOTO"
+        onClose={() => setIsPhotoChoiceVisible(false)}
+        actions={[{ title: 'CANCELAR', onPress: () => setIsPhotoChoiceVisible(false) }]}
+      >
+        <View style={{ gap: 10 }}>
+          <BrutalistButton title="📷 CÁMARA" onPress={handleCamera} />
+          <BrutalistButton title="🖼️ GALERÍA" onPress={handleGallery} />
+        </View>
+      </BrutalistModal>
 
       {/* Modal para editar nota */}
       <BrutalistModal
