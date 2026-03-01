@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Text, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { useStore } from '../store/useStore';
