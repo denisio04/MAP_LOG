@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Text, ActivityIndicator, TextInput, TouchableOpacity, Linking, Share, Image } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator, TextInput, TouchableOpacity, Linking, Share, Image, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useStore } from '../store/useStore';
@@ -10,17 +9,15 @@ import BrutalistModal from '../components/BrutalistModal';
 import BrutalistButton from '../components/BrutalistButton';
 
 /**
- * PANTALLA: Mapa (MapScreen)
- * Gestiona la visualización de marcadores, creación de notas desde el mapa
- * y la selección de categorías para las nuevas notas.
+ * PANTALLA: Mapa (MapScreen) - VERSIÓN OPENSTREETMAP (WebView)
+ * 
+ * NOTA: Se migró de react-native-maps a WebView + Leaflet para evitar 
+ * la necesidad de Google Maps API Keys que requieren tarjeta de crédito.
  */
 export default function MapScreen({ route }) {
-  // Parámetros recibidos por la navegación (pueden ser todos los ítems o solo algunos)
   const { items: initialItems, title, categoryId } = route.params || {};
+  const webViewRef = useRef(null);
 
-  const mapRef = useRef(null); // Referencia para controlar el Mapa (zoom, posición)
-
-  // Datos globales del almacén (useStore)
   const theme = useStore((state) => state.theme);
   const categories = useStore((state) => state.categories);
   const deleteItem = useStore((state) => state.deleteItem);
@@ -30,39 +27,29 @@ export default function MapScreen({ route }) {
   const currentColors = colors[theme] || colors.light;
   const insets = useSafeAreaInsets();
 
-  // ESTADOS LOCALES
-  const [items, setItems] = useState(initialItems || []); // Marcadores a mostrar
-  const [locationPermission, setLocationPermission] = useState(null); // ¿Tenemos permiso de GPS?
-  const [isMapReady, setIsMapReady] = useState(false); // ¿El mapa terminó de cargar?
+  const [items, setItems] = useState(initialItems || []);
+  const [locationPermission, setLocationPermission] = useState(null);
+  const [isLoaderVisible, setIsLoaderVisible] = useState(true);
 
-  // Estados para controlar los 5 tipos de modales diferentes
-  const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);       // Crear/Editar nota
-  const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false); // Elegir carpeta
-  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);   // Opciones al tocar marcador
-  const [isErrorModalVisible, setIsErrorModalVisible] = useState(false);       // Errores
-  const [isNewCategoryModalVisible, setIsNewCategoryModalVisible] = useState(false); // Crear carpeta desde mapa
+  const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
+  const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
+  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
+  const [isErrorModalVisible, setIsErrorModalVisible] = useState(false);
+  const [isNewCategoryModalVisible, setIsNewCategoryModalVisible] = useState(false);
 
   const [errorHeader, setErrorHeader] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Estados para el formulario de la nota
   const [isEditing, setIsEditing] = useState(false);
   const [editingItemId, setEditingItemId] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteDesc, setNewNoteDesc] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [lastCoordinate, setLastCoordinate] = useState(null); // Dónde pulsaste en el mapa
-  const [tempCategoryId, setTempCategoryId] = useState(categoryId || null); // Carpeta destino temporal
+  const [lastCoordinate, setLastCoordinate] = useState(null);
+  const [tempCategoryId, setTempCategoryId] = useState(categoryId || null);
+  const [newNoteImage, setNewNoteImage] = useState(null);
 
-  const [newNoteImage, setNewNoteImage] = useState(null); // URI de la imagen de la nota
-
-  // Actualiza los ítems si cambian los parámetros de ruta
-  useEffect(() => {
-    setItems(initialItems || []);
-  }, [initialItems]);
-
-  // Solicita permisos de ubicación al entrar a la pantalla
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -70,69 +57,112 @@ export default function MapScreen({ route }) {
     })();
   }, []);
 
-  // Lógica para enfocar el mapa cuando hay marcadores o una ubicación por defecto
-  useEffect(() => {
-    if (isMapReady && items && items.length > 0 && mapRef.current) {
-      if (items.length === 1) {
-        // Si hay un solo ítem, hacemos zoom sobre él
-        const item = items[0];
-        mapRef.current.animateToRegion({
-          latitude: item.latitude,
-          longitude: item.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        });
-      } else {
-        // Si hay varios, ajustamos la vista para que se vean TODOS
-        const coordinates = items.map(item => ({
-          latitude: item.latitude,
-          longitude: item.longitude,
-        }));
+  // Generar HTML del Mapa (Leaflet + OpenStreetMap)
+  const mapHtml = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          body { margin: 0; padding: 0; background: ${currentColors.background}; }
+          #map { height: 100vh; width: 100vw; border: none; }
+          .leaflet-container { background: ${currentColors.background} !important; }
+          .leaflet-tile-pane { filter: ${theme === 'dark' ? 'invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%)' : 'none'}; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${defaultLocation?.latitude || 0}, ${defaultLocation?.longitude || 0}], 13);
+          
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        mapRef.current.fitToCoordinates(coordinates, {
-          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-          animated: true,
-        });
-      }
-    } else if (isMapReady && defaultLocation && mapRef.current && (!items || items.length === 0)) {
-      // Si no hay ítems, vamos a la ubicación guardada por defecto (ej. tu casa)
-      mapRef.current.animateToRegion({
-        latitude: defaultLocation.latitude,
-        longitude: defaultLocation.longitude,
-        latitudeDelta: 0.1,
-        longitudeDelta: 0.1,
-      });
+          const markers = {};
+
+          function updateMarkers(newItems) {
+            // Limpiar marcadores viejos
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            
+            newItems.forEach(item => {
+              const marker = L.marker([item.latitude, item.longitude]).addTo(map);
+              marker.on('click', () => {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'markerPress', item }));
+              });
+              markers[item.id] = marker;
+            });
+
+            if (newItems.length > 0) {
+              const group = new L.featureGroup(Object.values(markers));
+              map.fitBounds(group.getBounds().pad(0.1));
+            }
+          }
+
+          map.on('contextmenu', (e) => {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapLongPress', coordinate: e.latlng }));
+          });
+
+          window.addEventListener('message', (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'syncMarkers') {
+              updateMarkers(data.items);
+            }
+          });
+
+          // Avisar que el mapa está listo
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+        </script>
+      </body>
+    </html>
+  `;
+
+  const onMessage = (event) => {
+    const data = JSON.parse(event.nativeEvent.data);
+    if (data.type === 'ready') {
+      setIsLoaderVisible(false);
+      webViewRef.current.postMessage(JSON.stringify({ type: 'syncMarkers', items }));
+    } else if (data.type === 'markerPress') {
+      handleMarkerPress(data.item);
+    } else if (data.type === 'mapLongPress') {
+      handleMapLongPress(data.coordinate);
     }
-  }, [items, defaultLocation, isMapReady]);
+  };
 
-  // Se ejecuta al tocar el "botón" de un marcador
+  const handleMapLongPress = (coordinate) => {
+    const coords = { latitude: coordinate.lat, longitude: coordinate.lng };
+    setLastCoordinate(coords);
+    if (!categoryId) {
+      setIsCategoryModalVisible(true);
+    } else {
+      setTempCategoryId(categoryId);
+      prepareNoteModal(false);
+    }
+  };
+
   const handleMarkerPress = (item) => {
-    // Calculamos la fecha para mostrarla en el modal de opciones
     const dateStr = item.createdAt
       ? `\nFECHA: ${new Date(item.createdAt).toLocaleDateString()} - ${new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
       : '';
-
     setSelectedItem({ ...item, dateDisplay: dateStr });
     setIsOptionsModalVisible(true);
   };
 
-  // Borra un marcador del mapa y de la base de datos
   const confirmDeleteMarker = () => {
     const item = selectedItem;
-    // Buscamos a qué categoría pertenece para poder borrarlo
     const category = categories.find(cat => cat.items.some(i => i.id === item.id));
     if (category) {
       deleteItem(category.id, item.id);
-      setItems(prev => prev.filter(i => i.id !== item.id));
+      const updatedItems = items.filter(i => i.id !== item.id);
+      setItems(updatedItems);
+      webViewRef.current.postMessage(JSON.stringify({ type: 'syncMarkers', items: updatedItems }));
     }
     setIsOptionsModalVisible(false);
   };
 
-  // Prepara el formulario para editar una nota existente
   const startEditMarker = () => {
     const item = selectedItem;
     const category = categories.find(cat => cat.items.some(i => i.id === item.id));
-
     setEditingItemId(item.id);
     setTempCategoryId(category?.id || null);
     setIsEditing(true);
@@ -140,12 +170,10 @@ export default function MapScreen({ route }) {
     setNewNoteDesc(item.description || '');
     setNewNoteImage(item.imageUri || null);
     setLastCoordinate({ latitude: item.latitude, longitude: item.longitude });
-
     setIsOptionsModalVisible(false);
     setIsNoteModalVisible(true);
   };
 
-  // Abre el GPS externo
   const handleOpenGPS = () => {
     if (!selectedItem) return;
     const url = `https://www.google.com/maps/search/?api=1&query=${selectedItem.latitude},${selectedItem.longitude}`;
@@ -153,7 +181,6 @@ export default function MapScreen({ route }) {
     setIsOptionsModalVisible(false);
   };
 
-  // Comparte ubicación nativamente
   const handleShareItem = async () => {
     if (!selectedItem) return;
     try {
@@ -165,22 +192,6 @@ export default function MapScreen({ route }) {
     }
   };
 
-  // Captura la posición donde el usuario deja pulsado el mapa (LongPress)
-  const handleMapPress = (e) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    setLastCoordinate({ latitude, longitude });
-
-    if (!categoryId) {
-      // Si estamos en el Mapa Global, primero pedimos elegir o crear una carpeta
-      setIsCategoryModalVisible(true);
-    } else {
-      // Si ya venimos de una categoría, vamos directo a crear la nota
-      setTempCategoryId(categoryId);
-      prepareNoteModal(false);
-    }
-  };
-
-  // Función para elegir foto
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -188,13 +199,11 @@ export default function MapScreen({ route }) {
       aspect: [4, 3],
       quality: 0.5,
     });
-
     if (!result.canceled) {
       setNewNoteImage(result.assets[0].uri);
     }
   };
 
-  // Limpia el formulario antes de abrir el modal de nota
   const prepareNoteModal = (editing) => {
     setIsEditing(editing);
     if (!editing) {
@@ -206,7 +215,6 @@ export default function MapScreen({ route }) {
     setIsNoteModalVisible(true);
   };
 
-  // Guarda la nota (Nueva o Editada)
   const handleSaveNote = () => {
     if (!newNoteTitle.trim()) {
       setErrorHeader("ERROR");
@@ -214,9 +222,7 @@ export default function MapScreen({ route }) {
       setIsErrorModalVisible(true);
       return;
     }
-
     const targetCategoryId = tempCategoryId;
-
     if (!targetCategoryId) {
       setErrorHeader("ERROR");
       setErrorMessage("NO SE PUDO DETERMINAR LA CATEGORÍA.");
@@ -224,17 +230,16 @@ export default function MapScreen({ route }) {
       return;
     }
 
+    let updatedItems = [];
     if (isEditing) {
-      // Lógica de actualización
       const updatedData = {
         title: newNoteTitle.trim(),
         description: newNoteDesc.trim(),
         imageUri: newNoteImage
       };
       useStore.getState().updateItem(targetCategoryId, editingItemId, updatedData);
-      setItems(prev => prev.map(item => item.id === editingItemId ? { ...item, ...updatedData } : item));
+      updatedItems = items.map(item => item.id === editingItemId ? { ...item, ...updatedData } : item);
     } else {
-      // Lógica de creación de nueva nota
       const newId = `item_${Date.now()}`;
       const newItem = {
         id: newId,
@@ -245,29 +250,27 @@ export default function MapScreen({ route }) {
         imageUri: newNoteImage,
         createdAt: Date.now()
       };
-
       addItemToCategory(targetCategoryId, newItem);
-      setItems(prev => [...prev, newItem]);
+      updatedItems = [...items, newItem];
     }
 
+    setItems(updatedItems);
+    webViewRef.current.postMessage(JSON.stringify({ type: 'syncMarkers', items: updatedItems }));
     setIsNoteModalVisible(false);
   };
 
-  // Selecciona la carpeta donde se guardará la nota (desde el mapa global)
   const handleSelectCategory = (id) => {
     setTempCategoryId(id);
     setIsCategoryModalVisible(false);
     prepareNoteModal(false);
   };
 
-  // Abre el modal para crear una carpeta nueva desde el mapa
   const handleCreateNewCategoryFromMap = () => {
     setIsCategoryModalVisible(false);
     setNewCategoryName('');
     setIsNewCategoryModalVisible(true);
   };
 
-  // Confirma la creación de la nueva carpeta y la selecciona automáticamente
   const confirmCreateCategoryFromMap = () => {
     if (!newCategoryName.trim()) {
       setErrorHeader("ERROR");
@@ -283,7 +286,6 @@ export default function MapScreen({ route }) {
 
   return (
     <View style={[styles.container, { backgroundColor: currentColors.background }]}>
-      {/* Banner de aviso si no hay GPS */}
       {locationPermission === false && (
         <View style={[styles.warningBanner, { backgroundColor: currentColors.text }]}>
           <Text style={[styles.warningText, { color: currentColors.background }]}>
@@ -292,31 +294,23 @@ export default function MapScreen({ route }) {
         </View>
       )}
 
-      {/* COMPONENTE PRINCIPAL: El Mapa */}
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        showsUserLocation={locationPermission}
-        zoomEnabled={true}
-        rotateEnabled={true}
-        onMapReady={() => setIsMapReady(true)}
-        onLongPress={handleMapPress} // Mantén pulsado para crear una nota
-        userInterfaceStyle={theme === 'dark' ? 'dark' : 'light'}
-        minZoomLevel={2}
-      >
-        {/* Renderizamos cada marcador en el mapa */}
-        {items && items.map(item => (
-          <Marker
-            key={item.id}
-            coordinate={{ latitude: item.latitude, longitude: item.longitude }}
-            title={item.title}
-            description={item.description}
-            onCalloutPress={() => handleMarkerPress(item)} // Toca el título para ver opciones
-          />
-        ))}
-      </MapView>
+      {isLoaderVisible && (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={currentColors.text} />
+          <Text style={{ marginTop: 10, color: currentColors.text, fontWeight: 'bold' }}>CARGANDO MAPA...</Text>
+        </View>
+      )}
 
-      {/* Barra inferior informativa */}
+      <WebView
+        ref={webViewRef}
+        originWhitelist={['*']}
+        source={{ html: mapHtml }}
+        onMessage={onMessage}
+        style={{ flex: 1, opacity: isLoaderVisible ? 0 : 1 }}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+      />
+
       <View style={[
         styles.footer,
         {
@@ -333,7 +327,6 @@ export default function MapScreen({ route }) {
         </Text>
       </View>
 
-      {/* MODAL 1: Crear o Editar Nota */}
       <BrutalistModal
         visible={isNoteModalVisible}
         onClose={() => setIsNoteModalVisible(false)}
@@ -351,7 +344,6 @@ export default function MapScreen({ route }) {
           onChangeText={setNewNoteTitle}
           autoFocus={true}
         />
-
         <TextInput
           style={[styles.modalInput, styles.textArea, { color: currentColors.text, borderColor: currentColors.border }]}
           placeholder="INFORMACIÓN ADICIONAL..."
@@ -361,7 +353,6 @@ export default function MapScreen({ route }) {
           multiline={true}
           numberOfLines={4}
         />
-
         <View style={styles.imagePickerArea}>
           {newNoteImage && (
             <Image source={{ uri: newNoteImage }} style={[styles.previewImage, { borderColor: currentColors.border }]} />
@@ -378,7 +369,6 @@ export default function MapScreen({ route }) {
         </View>
       </BrutalistModal>
 
-      {/* MODAL 2: Seleccionar Carpeta Destino */}
       <BrutalistModal
         visible={isCategoryModalVisible}
         onClose={() => setIsCategoryModalVisible(false)}
@@ -403,7 +393,6 @@ export default function MapScreen({ route }) {
         ))}
       </BrutalistModal>
 
-      {/* MODAL 3: Opciones del Marcador al tocarlo */}
       <BrutalistModal
         visible={isOptionsModalVisible}
         onClose={() => setIsOptionsModalVisible(false)}
@@ -426,7 +415,6 @@ export default function MapScreen({ route }) {
         <View style={{ height: 10 }} />
       </BrutalistModal>
 
-      {/* MODAL 4: Mensajes de Error */}
       <BrutalistModal
         visible={isErrorModalVisible}
         onClose={() => setIsErrorModalVisible(false)}
@@ -437,7 +425,6 @@ export default function MapScreen({ route }) {
         ]}
       />
 
-      {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */}
       <BrutalistModal
         visible={isNewCategoryModalVisible}
         onClose={() => setIsNewCategoryModalVisible(false)}
@@ -456,80 +443,25 @@ export default function MapScreen({ route }) {
           autoFocus={true}
         />
       </BrutalistModal>
-    </View >
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
-  warningBanner: {
-    padding: 10,
-    alignItems: 'center',
-  },
-  warningText: {
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  footer: {
-    padding: 12,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  footerTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  footerCount: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  modalInput: {
-    borderWidth: 1,
-    padding: 15,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  catOption: {
-    borderWidth: 1,
-    padding: 15,
-    marginHorizontal: 20,
-    marginVertical: 10,
-  },
-  catOptionText: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  imagePickerArea: {
-    marginTop: 10,
-  },
-  previewImage: {
-    width: '100%',
-    height: 120,
-    marginBottom: 10,
-    borderWidth: 1,
-  },
-  markerImage: {
-    width: '100%',
-    height: 150,
-    borderWidth: 1,
-  },
-  deleteLinkText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    textDecorationLine: 'underline',
-  }
+  container: { flex: 1 },
+  loaderContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 1, backgroundColor: 'white' },
+  warningBanner: { padding: 10, alignItems: 'center' },
+  warningText: { fontWeight: 'bold', fontSize: 12 },
+  footer: { padding: 12, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  footerTitle: { fontSize: 14, fontWeight: '900', textTransform: 'uppercase' },
+  footerCount: { fontSize: 12, fontWeight: 'bold' },
+  modalInput: { borderWidth: 1, padding: 15, fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  textArea: { height: 100, textAlignVertical: 'top' },
+  catOption: { borderWidth: 1, padding: 15, marginHorizontal: 20, marginVertical: 10 },
+  catOptionText: { fontWeight: 'bold', fontSize: 16 },
+  imagePickerArea: { marginTop: 10 },
+  previewImage: { width: '100%', height: 120, marginBottom: 10, borderWidth: 1 },
+  markerImage: { width: '100%', height: 150, borderWidth: 1 },
+  deleteLinkText: { fontSize: 12, fontWeight: 'bold', textDecorationLine: 'underline' }
 });
 
