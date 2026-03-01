@@ -180,12 +180,21 @@ export default function MapScreen({ route }) {
     }
   };
 
-  // Función para elegir foto
+  // Selecciona una foto de la galería
   const pickImage = async () => {
+    // Solicitar permisos explícitamente (mejor compatibilidad en APKs)
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setErrorHeader("ERROR");
+      setErrorMessage("SE REQUIERE PERMISO PARA ACCEDER A LAS FOTOS.");
+      setIsErrorModalVisible(true);
+      return;
+    }
+
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false, // Desactivado para evitar errores de Google Play Services en APKs
-      quality: 0.5,
+      quality: 0.7,
     });
 
     if (!result.canceled) {

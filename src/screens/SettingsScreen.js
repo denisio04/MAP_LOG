@@ -32,6 +32,8 @@ export default function SettingsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
+  const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState(null);
 
   // Obtiene la posición GPS actual del móvil y la guarda como "Hogar"
   const handleSaveLocation = async () => {
@@ -112,22 +114,8 @@ export default function SettingsScreen() {
       const importedData = JSON.parse(fileContent);
 
       if (importedData.categories && Array.isArray(importedData.categories)) {
-        Alert.alert(
-          "RESTAURAR DATOS",
-          "Esto reemplazará todos tus marcadores y carpetas actuales. ¿Deseas continuar?",
-          [
-            { text: "CANCELAR", style: "cancel" },
-            {
-              text: "CONFIRMAR",
-              onPress: () => {
-                importData(importedData.categories, importedData.defaultLocation || null);
-                setModalTitle('ÉXITO');
-                setModalMessage('Datos restaurados correctamente.');
-                setModalVisible(true);
-              }
-            }
-          ]
-        );
+        setPendingImportData(importedData);
+        setIsConfirmModalVisible(true);
       } else {
         throw new Error("Formato de archivo inválido");
       }
@@ -203,6 +191,36 @@ export default function SettingsScreen() {
         message={modalMessage}
         actions={[{ title: 'ACEPTAR', onPress: () => setModalVisible(false), primary: true }]}
       />
+
+      <BrutalistModal
+        visible={isConfirmModalVisible}
+        title="RESTAURAR DATOS"
+        onClose={() => setIsConfirmModalVisible(false)}
+        actions={[
+          {
+            title: 'CANCELAR',
+            onPress: () => setIsConfirmModalVisible(false)
+          },
+          {
+            title: 'CONFIRMAR',
+            primary: true,
+            onPress: () => {
+              importData(pendingImportData.categories, pendingImportData.defaultLocation || null);
+              setIsConfirmModalVisible(false);
+              setModalTitle('ÉXITO');
+              setModalMessage('Datos restaurados correctamente.');
+              setModalVisible(true);
+            }
+          }
+        ]}
+      >
+        <Text style={[styles.modalContentText, { color: currentColors.text }]}>
+          ESTO REEMPLAZARÁ TODOS TUS MARCADORES Y CARPETAS ACTUALES POR LOS DEL BACKUP.
+        </Text>
+        <Text style={[styles.modalContentText, { color: currentColors.text, marginTop: 10, fontWeight: '900' }]}>
+          ¿DESEAS CONTINUAR?
+        </Text>
+      </BrutalistModal>
     </ScrollView>
   );
 }
@@ -218,6 +236,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 16,
     fontWeight: 'bold',
+  },
+  modalContentText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
   },
   placeholderBox: {
     borderWidth: 1,

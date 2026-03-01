@@ -116,10 +116,17 @@ export default function CategoryDetailScreen({ route, navigation }) {
 
   // Función para elegir una foto
   const pickImage = async () => {
+    // Solicitar permisos explícitamente
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("ERROR", "SE REQUIERE PERMISO PARA ACCEDER A LAS FOTOS.");
+      return;
+    }
+
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false, // Desactivado para evitar errores de Google Play Services en APKs
-      quality: 0.5,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.7,
     });
 
     if (!result.canceled) {
