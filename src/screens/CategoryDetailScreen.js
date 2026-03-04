@@ -46,6 +46,8 @@ export default function CategoryDetailScreen({ route, navigation }) {
   // Estados para ordenación y ubicación
   const [userLocation, setUserLocation] = React.useState(null);
   const [sortByDistance, setSortByDistance] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [sortOrder, setSortOrder] = React.useState(null); // 'ASC' o null
 
   // Obtener ubicación del usuario para calcular distancias
   React.useEffect(() => {
@@ -63,18 +65,40 @@ export default function CategoryDetailScreen({ route, navigation }) {
     if (!category || !category.items) return [];
     let list = [...category.items];
 
-    if (sortByDistance && userLocation) {
-      list.sort((a, b) => {
-        const distA = getDistance(userLocation.latitude, userLocation.longitude, a.latitude, a.longitude);
-        const distB = getDistance(userLocation.latitude, userLocation.longitude, b.latitude, b.longitude);
-        return distA - distB;
-      });
+    const query = searchQuery.trim().toLowerCase();
+
+    // 1. Filtrar por búsqueda de producto
+    if (query) {
+      list = list.filter(item =>
+        item.productos && item.productos.some(p => p.nombre_producto.toLowerCase().includes(query))
+      );
+
+      // 2. Ordenar por precio del producto coincidente si sortOrder === 'ASC'
+      if (sortOrder === 'ASC') {
+        list.sort((a, b) => {
+          const matchingProductA = a.productos.find(p => p.nombre_producto.toLowerCase().includes(query));
+          const matchingProductB = b.productos.find(p => p.nombre_producto.toLowerCase().includes(query));
+          const priceA = matchingProductA ? Number(matchingProductA.precio) : Infinity;
+          const priceB = matchingProductB ? Number(matchingProductB.precio) : Infinity;
+          return priceA - priceB;
+        });
+      }
     } else {
-      // Por defecto ordenamos por fecha (más reciente arriba)
-      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      // Ordenamiento por defecto si no hay búsqueda
+      if (sortByDistance && userLocation) {
+        list.sort((a, b) => {
+          const distA = getDistance(userLocation.latitude, userLocation.longitude, a.latitude, a.longitude);
+          const distB = getDistance(userLocation.latitude, userLocation.longitude, b.latitude, b.longitude);
+          return distA - distB;
+        });
+      } else {
+        // Por defecto ordenamos por fecha (más reciente arriba)
+        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      }
     }
+
     return list;
-  }, [category, sortByDistance, userLocation]);
+  }, [category, sortByDistance, userLocation, searchQuery, sortOrder]);
 
   // Navega al mapa mostrando TODOS los ítems de esta categoría
   const handleGoToMap = () => {
@@ -226,79 +250,97 @@ export default function CategoryDetailScreen({ route, navigation }) {
   };
 
   // Define cómo se ve cada "fila" (nota) en la lista
-  const renderItem = ({ item }) => (
-    <View style={[styles.itemRow, { borderBottomColor: currentColors.border }]}>
-      <View style={styles.itemInfo}>
-        <Text style={[styles.itemTitle, { color: currentColors.text }]}>- {item.title}</Text>
-        <View style={styles.metadataRow}>
-          {item.createdAt && (
-            <Text style={[styles.itemDate, { color: currentColors.text }]}>
-              {new Date(item.createdAt).toLocaleDateString()} - {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-          )}
-          {userLocation && (
-            <Text style={[styles.itemDistance, { color: currentColors.text }]}>
-              {formatDistance(getDistance(userLocation.latitude, userLocation.longitude, item.latitude, item.longitude))}
-            </Text>
-          )}
-        </View>
+  const renderItem = ({ item }) => {
+    const query = searchQuery.trim().toLowerCase();
 
-        {/* Renderizado de Productos (POS) */}
-        {item.productos && item.productos.length > 0 && (
-          <View style={[styles.posListContainer, { borderColor: currentColors.border }]}>
-            {item.productos.map(p => (
-              <View key={p.id_producto} style={styles.posRow}>
-                <Text style={[styles.posName, { color: currentColors.text }]} numberOfLines={1}>{p.nombre_producto}</Text>
-
-                <View style={styles.dotsContainer}>
-                  <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
-                    ....................................................................
-                  </Text>
-                </View>
-
-                <Text style={[styles.posPrice, { color: currentColors.text }]}>${p.precio}</Text>
-              </View>
-            ))}
-            <View style={styles.posTotalRow}>
-              <Text style={[styles.posTotalText, { color: currentColors.text }]}>TOTAL:</Text>
-              <Text style={[styles.posTotalValue, { color: currentColors.text }]}>
-                ${item.productos.reduce((sum, p) => sum + Number(p.precio), 0)}
+    return (
+      <View style={[styles.itemRow, { borderBottomColor: currentColors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
+        <View style={[styles.itemInfo, { paddingRight: 0 }]}>
+          <Text style={[styles.itemTitle, { color: currentColors.text }]}>{item.title.toUpperCase()}</Text>
+          <View style={styles.metadataRow}>
+            {item.createdAt && (
+              <Text style={[styles.itemDate, { color: currentColors.text }]}>
+                {new Date(item.createdAt).toLocaleDateString()} - {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
-            </View>
+            )}
+            {userLocation && (
+              <Text style={[styles.itemDistance, { color: currentColors.text }]}>
+                {formatDistance(getDistance(userLocation.latitude, userLocation.longitude, item.latitude, item.longitude))}
+              </Text>
+            )}
           </View>
-        )}
 
-        {item.imageUri && (
-          <Image
-            source={{ uri: item.imageUri }}
-            style={[styles.itemImage, { borderColor: currentColors.border }]}
-          />
-        )}
-        {/* Enlaces para editar o borrar este ítem específico */}
-        <View style={styles.actionLinks}>
-          <TouchableOpacity onPress={() => handleEditItem(item)} style={styles.editLink}>
-            <Text style={[styles.deleteLinkText, { color: currentColors.primary }]}>EDITAR</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleOpenGPS(item)} style={styles.editLink}>
-            <Text style={[styles.deleteLinkText, { color: currentColors.text }]}>GPS</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleShareItem(item)} style={styles.editLink}>
-            <Text style={[styles.deleteLinkText, { color: currentColors.text }]}>COMPARTIR</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDeleteItem(item)} style={styles.deleteLink}>
-            <Text style={[styles.deleteLinkText, { color: '#FF0000' }]}>ELIMINAR</Text>
-          </TouchableOpacity>
+          {/* Renderizado de Productos (POS) */}
+          {item.productos && item.productos.length > 0 && (
+            <View style={[styles.posListContainer, { borderColor: currentColors.border }]}>
+              {item.productos.map(p => {
+                const isMatch = query && p.nombre_producto.toLowerCase().includes(query);
+                return (
+                  <View
+                    key={p.id_producto}
+                    style={[
+                      styles.posRow,
+                      isMatch && { backgroundColor: currentColors.text, paddingHorizontal: 5, marginHorizontal: -5 }
+                    ]}
+                  >
+                    <Text style={[styles.posName, { color: isMatch ? currentColors.background : currentColors.text }, isMatch && { fontWeight: '900' }]} numberOfLines={1}>
+                      {p.nombre_producto.toUpperCase()}
+                    </Text>
+
+                    <View style={styles.dotsContainer}>
+                      <Text style={[styles.dotsText, { color: isMatch ? currentColors.background : currentColors.border }]} numberOfLines={1}>
+                        ....................................................................
+                      </Text>
+                    </View>
+
+                    <Text style={[styles.posPrice, { color: isMatch ? currentColors.background : currentColors.text }, isMatch && { fontWeight: '900', fontSize: 16 }]}>
+                      ${p.precio}
+                    </Text>
+                  </View>
+                );
+              })}
+              <View style={[styles.posTotalRow, { borderTopColor: currentColors.border }]}>
+                <Text style={[styles.posTotalText, { color: currentColors.text }]}>TOTAL:</Text>
+                <Text style={[styles.posTotalValue, { color: currentColors.text }]}>
+                  ${item.productos.reduce((sum, p) => sum + Number(p.precio), 0)}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {item.imageUri && (
+            <Image
+              source={{ uri: item.imageUri }}
+              style={[styles.itemImage, { borderColor: currentColors.border }]}
+            />
+          )}
+          {/* Enlaces para editar o borrar este ítem específico */}
+          <View style={styles.actionLinks}>
+            <TouchableOpacity onPress={() => handleEditItem(item)} style={styles.editLink}>
+              <Text style={[styles.deleteLinkText, { color: currentColors.primary }]}>EDITAR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleOpenGPS(item)} style={styles.editLink}>
+              <Text style={[styles.deleteLinkText, { color: currentColors.text }]}>GPS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleShareItem(item)} style={styles.editLink}>
+              <Text style={[styles.deleteLinkText, { color: currentColors.text }]}>COMPARTIR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDeleteItem(item)} style={styles.deleteLink}>
+              <Text style={[styles.deleteLinkText, { color: '#FF0000' }]}>ELIMINAR</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        <BrutalistButton
+          title="[ VER EN MAPA ]"
+          fullWidth={true}
+          textStyle={{ fontSize: 14, fontWeight: '900' }}
+          style={{ paddingVertical: 12, marginTop: 15, borderWidth: 2 }}
+          onPress={() => handleViewSingleMap(item)}
+        />
       </View>
-      <BrutalistButton
-        title="MAPA"
-        fullWidth={false}
-        textStyle={{ fontSize: 12 }}
-        style={{ paddingVertical: 8, paddingHorizontal: 12 }}
-        onPress={() => handleViewSingleMap(item)}
-      />
-    </View>
-  );
+    );
+  };
 
   // Si por alguna razón la categoría no existe, mostramos un aviso
   if (!category) {
@@ -318,14 +360,34 @@ export default function CategoryDetailScreen({ route, navigation }) {
         renderItem={renderItem}
         contentContainerStyle={styles.list}
         ListHeaderComponent={() => (
-          <TouchableOpacity
-            onPress={() => setSortByDistance(!sortByDistance)}
-            style={[styles.sortToggle, { borderColor: currentColors.border }]}
-          >
-            <Text style={[styles.sortToggleText, { color: currentColors.text }]}>
-              ORDENAR POR: {sortByDistance ? 'CERCANÍA' : 'RECIENTE'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.listHeaderContainer}>
+            <TextInput
+              style={[styles.searchInput, { color: currentColors.text, borderColor: currentColors.border }]}
+              placeholder="[ BUSCAR PRODUCTO... ]"
+              placeholderTextColor={`${currentColors.text}80`}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            <View style={styles.sortButtonsRow}>
+              <TouchableOpacity
+                onPress={() => setSortByDistance(!sortByDistance)}
+                style={[styles.sortToggle, { borderColor: currentColors.border, flex: 1, marginRight: 5, backgroundColor: sortByDistance ? currentColors.text : 'transparent' }]}
+              >
+                <Text style={[styles.sortToggleText, { color: sortByDistance ? currentColors.background : currentColors.text }]}>
+                  {sortByDistance ? '[ DISTANCIA: ON ]' : '[ DISTANCIA: OFF ]'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setSortOrder(sortOrder === 'ASC' ? null : 'ASC')}
+                style={[styles.sortToggle, { borderColor: currentColors.border, flex: 1, marginLeft: 5, backgroundColor: sortOrder === 'ASC' ? currentColors.text : 'transparent' }]}
+              >
+                <Text style={[styles.sortToggleText, { color: sortOrder === 'ASC' ? currentColors.background : currentColors.text }]}>
+                  {sortOrder === 'ASC' ? '[ ORDEN: PRECIO MENOR v ]' : '[ ORDEN: NORMAL ]'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
       />
 
@@ -695,6 +757,31 @@ const styles = StyleSheet.create({
   totalValue: {
     fontWeight: '900',
     fontSize: 18,
+  },
+  listHeaderContainer: {
+    paddingVertical: 15,
+  },
+  searchInput: {
+    borderWidth: 2,
+    padding: 15,
+    fontSize: 16,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  sortButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sortToggle: {
+    borderWidth: 2,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortToggleText: {
+    fontWeight: '900',
+    fontSize: 12,
   }
 });
 
