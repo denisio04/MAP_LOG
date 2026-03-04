@@ -522,21 +522,24 @@ export default function MapScreen({ route }) {
           </TouchableOpacity>
         )}
     </View>
-      </BrutalistModal>
+      </BrutalistModal >
 
-      {/* MODAL 2: Seleccionar Carpeta Destino */}
-    <BrutalistModal
-        visible={isCategoryModalVisible}
-        onClose={() => setIsCategoryModalVisible(false)}
-        title="SELECCIONAR CARPETA"
-        scrollable={true}
-        forceColumn={true}
-        actions={[
-          { title: 'CANCELAR', onPress: () => setIsCategoryModalVisible(false) },
-          { title: '+ NUEVA CARPETA', onPress: handleCreateNewCategoryFromMap, primary: true, autoClose: false }
-        ]}
-      >
-        {categories.map(cat => (
+    {/* MODAL 2: Seleccionar Carpeta Destino */ }
+    < BrutalistModal
+  visible = { isCategoryModalVisible }
+  onClose = {() => setIsCategoryModalVisible(false)
+}
+title = "SELECCIONAR CARPETA"
+scrollable = { true}
+forceColumn = { true}
+actions = {
+  [
+  { title: 'CANCELAR', onPress: () => setIsCategoryModalVisible(false) },
+  { title: '+ NUEVA CARPETA', onPress: handleCreateNewCategoryFromMap, primary: true, autoClose: false }
+  ]}
+  >
+{
+  categories.map(cat => (
     <TouchableOpacity
       key={cat.id}
       style={[styles.catOption, { borderColor: currentColors.border }]}
@@ -546,24 +549,25 @@ export default function MapScreen({ route }) {
         {cat.title.toUpperCase()}
       </Text>
     </TouchableOpacity>
-        ))}
-      }
-      </BrutalistModal>
+  ))
+}
+      </BrutalistModal >
 
-      {/* MODAL 3: Opciones del Marcador al tocarlo */}
-      <BrutalistModal
-        visible={isOptionsModalVisible}
-        onClose={() => setIsOptionsModalVisible(false)}
-        title="OPCIONES"
-        message={selectedItem ? `¿QUÉ DESEAS HACER CON "${selectedItem.title.toUpperCase()}"?${selectedItem.dateDisplay || ''}` : ''}
-        actions={[
+  {/* MODAL 3: Opciones del Marcador al tocarlo */ }
+  < BrutalistModal
+visible = { isOptionsModalVisible }
+onClose = {() => setIsOptionsModalVisible(false)}
+title = "OPCIONES"
+message = { selectedItem? `¿QUÉ DESEAS HACER CON "${selectedItem.title.toUpperCase()}"?${selectedItem.dateDisplay || ''}` : ''}
+actions = {
+  [
   { title: 'GPS', onPress: handleOpenGPS },
   { title: 'COMPARTIR', onPress: handleShareItem },
   { title: 'EDITAR', onPress: startEditMarker },
   { title: 'ELIMINAR', onPress: confirmDeleteMarker, primary: false },
-          { title: 'CANCELAR', onPress: () => setIsOptionsModalVisible(false) }
-        ]}
-      >
+  { title: 'CANCELAR', onPress: () => setIsOptionsModalVisible(false) }
+  ]}
+  >
   { selectedItem && selectedItem.imageUri && (
     <Image
       source={{ uri: selectedItem.imageUri }}
@@ -571,9 +575,9 @@ export default function MapScreen({ route }) {
     />
   )}
 <View style={{ height: 10 }} />
-      </BrutalistModal>
+      </BrutalistModal >
 
-      {/* MODAL 4: Mensajes de Error */}
+  {/* MODAL 4: Mensajes de Error */ }
   < BrutalistModal
 visible = { isErrorModalVisible }
 onClose = {() => setIsErrorModalVisible(false)}
@@ -582,7 +586,7 @@ message = { errorMessage }
 actions = { [{ title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }]}
   />
 
-      {/* Modal para elegir origen de foto */}
+  {/* Modal para elegir origen de foto */ }
   < BrutalistModal
 visible = { isPhotoChoiceVisible }
 title = "AÑADIR FOTO"
@@ -593,9 +597,9 @@ actions = { [{ title: 'CANCELAR', onPress: () => setIsPhotoChoiceVisible(false) 
     <BrutalistButton title="📷 CÁMARA" onPress={handleCamera} />
     <BrutalistButton title="🖼️ GALERÍA" onPress={handleGallery} />
   </View>
-      </BrutalistModal>
+      </BrutalistModal >
 
-      {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */}
+  {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */ }
   < BrutalistModal
 visible = { isNewCategoryModalVisible }
 onClose = {() => setIsNewCategoryModalVisible(false)}
@@ -614,8 +618,8 @@ actions = {
     onChangeText={setNewCategoryName}
     autoFocus={true}
   />
-      </BrutalistModal>
-    </View>
+      </BrutalistModal >
+    </View >
   );
 }
 
