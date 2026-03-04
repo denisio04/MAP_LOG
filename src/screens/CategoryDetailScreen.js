@@ -38,7 +38,9 @@ export default function CategoryDetailScreen({ route, navigation }) {
   const [isEditModalVisible, setIsEditModalVisible] = React.useState(false);
   const [itemToEdit, setItemToEdit] = React.useState(null);
   const [editTitle, setEditTitle] = React.useState('');
-  const [editDesc, setEditDesc] = React.useState('');
+  const [editProducts, setEditProducts] = React.useState([]); // Cambio a array
+  const [editProductName, setEditProductName] = React.useState(''); // Input temp
+  const [editProductPrice, setEditProductPrice] = React.useState(''); // Input temp
   const [editImage, setEditImage] = React.useState(null);
 
   // Estados para ordenación y ubicación
@@ -110,7 +112,7 @@ export default function CategoryDetailScreen({ route, navigation }) {
   const handleEditItem = (item) => {
     setItemToEdit(item);
     setEditTitle(item.title);
-    setEditDesc(item.description || '');
+    setEditProducts(item.productos || []);
     setEditImage(item.imageUri || null);
     setIsEditModalVisible(true);
   };
@@ -158,13 +160,40 @@ export default function CategoryDetailScreen({ route, navigation }) {
     setIsPhotoChoiceVisible(true);
   };
 
+  // Añadir producto a la lista temporal
+  const handleAddProduct = () => {
+    if (!editProductName.trim() || !editProductPrice.trim()) {
+      return;
+    }
+
+    const priceNum = parseFloat(editProductPrice);
+    if (isNaN(priceNum)) {
+      return;
+    }
+
+    const newProduct = {
+      id_producto: `prod_${Date.now()}`,
+      nombre_producto: editProductName.trim(),
+      precio: priceNum
+    };
+
+    setEditProducts(prev => [...prev, newProduct]);
+    setEditProductName('');
+    setEditProductPrice('');
+  };
+
+  // Quitar producto de la lista temporal
+  const handleRemoveProduct = (prodId) => {
+    setEditProducts(prev => prev.filter(p => p.id_producto !== prodId));
+  };
+
   // Guarda los cambios realizados en el ítem
   const handleSaveEdit = () => {
     if (!editTitle.trim()) return;
 
     useStore.getState().updateItem(categoryId, itemToEdit.id, {
       title: editTitle.trim(),
-      description: editDesc.trim(),
+      productos: editProducts,
       imageUri: editImage,
     });
     setIsEditModalVisible(false);
@@ -179,7 +208,17 @@ export default function CategoryDetailScreen({ route, navigation }) {
   // Comparte la ubicación y descripción vía Share nativo
   const handleShareItem = async (item) => {
     try {
-      const message = `📍 ${item.title.toUpperCase()}\n\n${item.description || ''}\n\nUbicación: https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`;
+      let productsText = '';
+      if (item.productos && item.productos.length > 0) {
+        let total = 0;
+        item.productos.forEach(p => {
+          productsText += `- ${p.nombre_producto} ($${p.precio})\n`;
+          total += Number(p.precio);
+        });
+        productsText += `\nTOTAL: $${total}`;
+      }
+
+      const message = `📍 ${item.title.toUpperCase()}\n\n${productsText}\n\nUbicación: https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`;
       await Share.share({ message });
     } catch (error) {
       console.error(error.message);
@@ -203,9 +242,32 @@ export default function CategoryDetailScreen({ route, navigation }) {
             </Text>
           )}
         </View>
-        {item.description ? (
-          <Text style={[styles.itemDesc, { color: currentColors.text }]}>{item.description}</Text>
-        ) : null}
+
+        {/* Renderizado de Productos (POS) */}
+        {item.productos && item.productos.length > 0 && (
+          <View style={[styles.posListContainer, { borderColor: currentColors.border }]}>
+            {item.productos.map(p => (
+              <View key={p.id_producto} style={styles.posRow}>
+                <Text style={[styles.posName, { color: currentColors.text }]} numberOfLines={1}>{p.nombre_producto}</Text>
+
+                <View style={styles.dotsContainer}>
+                  <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
+                    ....................................................................
+                  </Text>
+                </View>
+
+                <Text style={[styles.posPrice, { color: currentColors.text }]}>${p.precio}</Text>
+              </View>
+            ))}
+            <View style={styles.posTotalRow}>
+              <Text style={[styles.posTotalText, { color: currentColors.text }]}>TOTAL:</Text>
+              <Text style={[styles.posTotalValue, { color: currentColors.text }]}>
+                ${item.productos.reduce((sum, p) => sum + Number(p.precio), 0)}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {item.imageUri && (
           <Image
             source={{ uri: item.imageUri }}
@@ -308,29 +370,85 @@ export default function CategoryDetailScreen({ route, navigation }) {
       <BrutalistModal
         visible={isEditModalVisible}
         onClose={() => setIsEditModalVisible(false)}
-        title="EDITAR NOTA"
+        title="EDITAR POS"
+        scrollable={true}
         actions={[
           { title: 'CANCELAR', onPress: () => setIsEditModalVisible(false) },
-          { title: 'GUARDAR', onPress: handleSaveEdit, primary: true }
+          { title: 'GUARDAR POS', onPress: handleSaveEdit, primary: true }
         ]}
       >
         <TextInput
           style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="TÍTULO"
+          placeholder="NOMBRE DEL PUNTO DE VENTA (POS)"
           placeholderTextColor={`${currentColors.text}80`}
           value={editTitle}
           onChangeText={setEditTitle}
           autoFocus={true}
         />
-        <TextInput
-          style={[styles.modalInput, styles.textArea, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="INFORMACIÓN ADICIONAL..."
-          placeholderTextColor={`${currentColors.text}80`}
-          value={editDesc}
-          onChangeText={setEditDesc}
-          multiline={true}
-          numberOfLines={4}
-        />
+
+        {/* Sección para añadir productos */}
+        <View style={[styles.productFormSection, { borderColor: currentColors.border }]}>
+          <Text style={[styles.productSectionTitle, { color: currentColors.text }]}>AÑADIR PRODUCTO</Text>
+          <View style={styles.productInputRow}>
+            <TextInput
+              style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+              placeholder="NOMBRE"
+              placeholderTextColor={`${currentColors.text}80`}
+              value={editProductName}
+              onChangeText={setEditProductName}
+            />
+            <TextInput
+              style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+              placeholder="$ PRECIO"
+              placeholderTextColor={`${currentColors.text}80`}
+              value={editProductPrice}
+              onChangeText={setEditProductPrice}
+              keyboardType="numeric"
+            />
+          </View>
+          <TouchableOpacity
+            style={[styles.addProductBtn, { borderColor: currentColors.border, backgroundColor: currentColors.text }]}
+            onPress={handleAddProduct}
+          >
+            <Text style={[styles.addProductBtnText, { color: currentColors.background }]}>+ AÑADIR PRODUCTO</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Lista visual de productos añadidos */}
+        {editProducts.length > 0 && (
+          <View style={[styles.productsListContainer, { borderColor: currentColors.border }]}>
+            {editProducts.map((prod) => (
+              <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border }]}>
+                <Text style={[styles.productItemName, { color: currentColors.text }]} numberOfLines={1}>
+                  {prod.nombre_producto.toUpperCase()}
+                </Text>
+
+                <View style={styles.dotsContainer}>
+                  <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
+                    ....................................................................
+                  </Text>
+                </View>
+
+                <Text style={[styles.productItemPrice, { color: currentColors.text }]}>
+                  ${prod.precio}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.productDeleteBtn, { borderColor: currentColors.border }]}
+                  onPress={() => handleRemoveProduct(prod.id_producto)}
+                >
+                  <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <View style={styles.totalRow}>
+              <Text style={[styles.totalText, { color: currentColors.text }]}>TOTAL:</Text>
+              <Text style={[styles.totalValue, { color: currentColors.text }]}>
+                ${editProducts.reduce((sum, p) => sum + Number(p.precio), 0)}
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.imagePickerArea}>
           {editImage && (
@@ -449,8 +567,134 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     height: 120,
-    marginBottom: 10,
+  }, // <-- Falta coma de separación aquí
+  // ESTILOS DE PRODUCTOS (POS)
+  posListContainer: {
     borderWidth: 1,
+    padding: 10,
+    marginTop: 10,
+  },
+  posRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  posName: {
+    fontSize: 14,
+    fontWeight: 'normal',
+    maxWidth: '50%',
+  },
+  posPrice: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  posTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    marginTop: 5,
+    borderTopWidth: 1,
+    borderTopStyle: 'dashed',
+  },
+  posTotalText: {
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  posTotalValue: {
+    fontWeight: '900',
+    fontSize: 16,
+  },
+
+  // ESTILOS DEL MODAL DE EDICIÓN
+  productFormSection: {
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 15,
+  },
+  productSectionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  productInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  productNameInput: {
+    flex: 2,
+    marginBottom: 0,
+  },
+  productPriceInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  addProductBtn: {
+    borderWidth: 1,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addProductBtnText: {
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  productsListContainer: {
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 15,
+  },
+  productItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomStyle: 'dashed',
+  },
+  productItemName: {
+    fontWeight: 'bold',
+    fontSize: 14,
+    maxWidth: '40%',
+  },
+  dotsContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 4,
+  },
+  dotsText: {
+    fontSize: 14,
+    opacity: 0.5,
+  },
+  productItemPrice: {
+    fontWeight: '900',
+    fontSize: 14,
+    marginLeft: 10,
+  },
+  productDeleteBtn: {
+    borderWidth: 1,
+    padding: 5,
+    marginLeft: 10,
+    width: 30,
+    alignItems: 'center',
+  },
+  productDeleteBtnText: {
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    marginTop: 5,
+  },
+  totalText: {
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  totalValue: {
+    fontWeight: '900',
+    fontSize: 18,
   }
 });
 

@@ -10,23 +10,23 @@ const MOCK_CATEGORIES = [
     id: 'c1',
     title: 'Compra de comida',
     items: [
-      { id: 'i1', title: 'Pomo de Nutella', description: 'Comprar en el supermercado central', latitude: 40.4168, longitude: -3.7038 },
-      { id: 'i2', title: 'Pan de Molde', description: 'Panadería artesanal', latitude: 40.4170, longitude: -3.7045 },
+      { id: 'i1', title: 'Pomo de Nutella', productos: [{ id_producto: 'p1', nombre_producto: 'Nutella 500g', precio: 300 }], latitude: 40.4168, longitude: -3.7038 },
+      { id: 'i2', title: 'Pan de Molde', productos: [{ id_producto: 'p2', nombre_producto: 'Pan Blanco', precio: 250 }], latitude: 40.4170, longitude: -3.7045 },
     ]
   },
   {
     id: 'c2',
     title: 'Productos del hogar',
     items: [
-      { id: 'i3', title: 'Detergente', description: 'Aprovechar oferta', latitude: 40.4150, longitude: -3.7020 },
-      { id: 'i4', title: 'Bombillas LED', description: 'Ferretería de la esquina', latitude: 40.4180, longitude: -3.7010 },
+      { id: 'i3', title: 'Detergente', productos: [{ id_producto: 'p3', nombre_producto: 'Lavavajillas', precio: 150 }], latitude: 40.4150, longitude: -3.7020 },
+      { id: 'i4', title: 'Bombillas LED', productos: [{ id_producto: 'p4', nombre_producto: 'LED 10W', precio: 50 }], latitude: 40.4180, longitude: -3.7010 },
     ]
   },
   {
     id: 'c3',
     title: 'Cafeterías por visitar',
     items: [
-      { id: 'i5', title: 'Café de Especialidad', description: 'Recomendado por Juan', latitude: 40.4195, longitude: -3.7060 },
+      { id: 'i5', title: 'Café de Especialidad', productos: [{ id_producto: 'p5', nombre_producto: 'Cafe Latte', precio: 200 }, { id_producto: 'p6', nombre_producto: 'Croissant', precio: 120 }], latitude: 40.4195, longitude: -3.7060 },
     ]
   }
 ];

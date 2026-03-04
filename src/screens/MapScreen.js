@@ -50,7 +50,9 @@ export default function MapScreen({ route }) {
   const [editingItemId, setEditingItemId] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [newNoteTitle, setNewNoteTitle] = useState('');
-  const [newNoteDesc, setNewNoteDesc] = useState('');
+  const [newNoteProducts, setNewNoteProducts] = useState([]); // Array de productos
+  const [newProductName, setNewProductName] = useState(''); // Input temporal
+  const [newProductPrice, setNewProductPrice] = useState(''); // Input temporal
   const [newCategoryName, setNewCategoryName] = useState('');
   const [lastCoordinate, setLastCoordinate] = useState(null); // Dónde pulsaste en el mapa
   const [tempCategoryId, setTempCategoryId] = useState(categoryId || null); // Carpeta destino temporal
@@ -138,7 +140,7 @@ export default function MapScreen({ route }) {
     setTempCategoryId(category?.id || null);
     setIsEditing(true);
     setNewNoteTitle(item.title);
-    setNewNoteDesc(item.description || '');
+    setNewNoteProducts(item.productos || []);
     setNewNoteImage(item.imageUri || null);
     setLastCoordinate({ latitude: item.latitude, longitude: item.longitude });
 
@@ -158,7 +160,18 @@ export default function MapScreen({ route }) {
   const handleShareItem = async () => {
     if (!selectedItem) return;
     try {
-      const message = `📍 ${selectedItem.title.toUpperCase()}\n\n${selectedItem.description || ''}\n\nUbicación: https://www.google.com/maps/search/?api=1&query=${selectedItem.latitude},${selectedItem.longitude}`;
+      // Generar el desglose de productos para el texto compartido
+      let productsText = '';
+      if (selectedItem.productos && selectedItem.productos.length > 0) {
+        let total = 0;
+        selectedItem.productos.forEach(p => {
+          productsText += `- ${p.nombre_producto} ($${p.precio})\n`;
+          total += Number(p.precio);
+        });
+        productsText += `\nTOTAL: $${total}`;
+      }
+
+      const message = `📍 ${selectedItem.title.toUpperCase()}\n\n${productsText}\n\nUbicación: https://www.google.com/maps/search/?api=1&query=${selectedItem.latitude},${selectedItem.longitude}`;
       await Share.share({ message });
       setIsOptionsModalVisible(false);
     } catch (error) {
@@ -234,10 +247,45 @@ export default function MapScreen({ route }) {
     if (!editing) {
       setEditingItemId(null);
       setNewNoteTitle('');
-      setNewNoteDesc('');
+      setNewNoteProducts([]);
+      setNewProductName('');
+      setNewProductPrice('');
       setNewNoteImage(null);
     }
     setIsNoteModalVisible(true);
+  };
+
+  // Añadir producto a la lista temporal
+  const handleAddProduct = () => {
+    if (!newProductName.trim() || !newProductPrice.trim()) {
+      setErrorHeader("ERROR");
+      setErrorMessage("NOMBRE Y PRECIO DEL PRODUCTO SON REQUERIDOS");
+      setIsErrorModalVisible(true);
+      return;
+    }
+
+    const priceNum = parseFloat(newProductPrice);
+    if (isNaN(priceNum)) {
+      setErrorHeader("ERROR");
+      setErrorMessage("EL PRECIO DEBE SER UN NÚMERO VÁLIDO");
+      setIsErrorModalVisible(true);
+      return;
+    }
+
+    const newProduct = {
+      id_producto: `prod_${Date.now()}`,
+      nombre_producto: newProductName.trim(),
+      precio: priceNum
+    };
+
+    setNewNoteProducts(prev => [...prev, newProduct]);
+    setNewProductName(''); // Limpiar inputs
+    setNewProductPrice('');
+  };
+
+  // Quitar producto de la lista temporal
+  const handleRemoveProduct = (prodId) => {
+    setNewNoteProducts(prev => prev.filter(p => p.id_producto !== prodId));
   };
 
   // Guarda la nota (Nueva o Editada)
@@ -262,7 +310,7 @@ export default function MapScreen({ route }) {
       // Lógica de actualización
       const updatedData = {
         title: newNoteTitle.trim(),
-        description: newNoteDesc.trim(),
+        productos: newNoteProducts,
         imageUri: newNoteImage
       };
       useStore.getState().updateItem(targetCategoryId, editingItemId, updatedData);
@@ -273,7 +321,7 @@ export default function MapScreen({ route }) {
       const newItem = {
         id: newId,
         title: newNoteTitle.trim(),
-        description: newNoteDesc.trim(),
+        productos: newNoteProducts,
         latitude: lastCoordinate.latitude,
         longitude: lastCoordinate.longitude,
         imageUri: newNoteImage,
@@ -339,15 +387,24 @@ export default function MapScreen({ route }) {
         minZoomLevel={2}
       >
         {/* Renderizamos cada marcador en el mapa */}
-        {items && items.map(item => (
-          <Marker
-            key={item.id}
-            coordinate={{ latitude: item.latitude, longitude: item.longitude }}
-            title={item.title}
-            description={item.description}
-            onCalloutPress={() => handleMarkerPress(item)} // Toca el título para ver opciones
-          />
-        ))}
+        {items && items.map(item => {
+          // Generar descripción derivada (Ej: "3 PRODUCTOS - $450")
+          let markerDesc = '';
+          if (item.productos && item.productos.length > 0) {
+            const total = item.productos.reduce((sum, p) => sum + Number(p.precio), 0);
+            markerDesc = `${item.productos.length} PRODUCTOS - $${total}`;
+          }
+
+          return (
+            <Marker
+              key={item.id}
+              coordinate={{ latitude: item.latitude, longitude: item.longitude }}
+              title={item.title}
+              description={markerDesc}
+              onCalloutPress={() => handleMarkerPress(item)} // Toca el título para ver opciones
+            />
+          );
+        })}
       </MapView>
 
       {/* Barra inferior informativa */}
@@ -367,140 +424,201 @@ export default function MapScreen({ route }) {
         </Text>
       </View>
 
-      {/* MODAL 1: Crear o Editar Nota */}
+      {/* MODAL 1: Crear o Editar Nota (POS) */}
       <BrutalistModal
         visible={isNoteModalVisible}
         onClose={() => setIsNoteModalVisible(false)}
-        title={isEditing ? 'EDITAR NOTA' : 'NUEVA NOTA'}
+        title={isEditing ? 'EDITAR POS' : 'NUEVO POS'}
+        scrollable={true}
         actions={[
           { title: 'CANCELAR', onPress: () => setIsNoteModalVisible(false) },
-          { title: 'GUARDAR', onPress: handleSaveNote, primary: true }
+          { title: 'GUARDAR POS', onPress: handleSaveNote, primary: true }
         ]}
       >
         <TextInput
           style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="TÍTULO"
+          placeholder="NOMBRE DEL PUNTO DE VENTA (POS)"
           placeholderTextColor={`${currentColors.text}80`}
           value={newNoteTitle}
           onChangeText={setNewNoteTitle}
-          autoFocus={true}
         />
 
-        <TextInput
-          style={[styles.modalInput, styles.textArea, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="INFORMACIÓN ADICIONAL..."
-          placeholderTextColor={`${currentColors.text}80`}
-          value={newNoteDesc}
-          onChangeText={setNewNoteDesc}
-          multiline={true}
-          numberOfLines={4}
-        />
-
-        <View style={styles.imagePickerArea}>
-          {newNoteImage && (
-            <Image source={{ uri: newNoteImage }} style={[styles.previewImage, { borderColor: currentColors.border }]} />
-          )}
-          <BrutalistButton
-            title={newNoteImage ? "CAMBIAR FOTO" : "AÑADIR FOTO"}
-            onPress={pickImage}
-          />
-          {newNoteImage && (
-            <TouchableOpacity onPress={() => setNewNoteImage(null)} style={{ marginTop: 10 }}>
-              <Text style={[styles.deleteLinkText, { color: '#FF0000', textAlign: 'center' }]}>QUITAR FOTO</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </BrutalistModal>
-
-      {/* MODAL 2: Seleccionar Carpeta Destino */}
-      <BrutalistModal
-        visible={isCategoryModalVisible}
-        onClose={() => setIsCategoryModalVisible(false)}
-        title="SELECCIONAR CARPETA"
-        scrollable={true}
-        forceColumn={true}
-        actions={[
-          { title: 'CANCELAR', onPress: () => setIsCategoryModalVisible(false) },
-          { title: '+ NUEVA CARPETA', onPress: handleCreateNewCategoryFromMap, primary: true, autoClose: false }
-        ]}
-      >
-        {categories.map(cat => (
+        {/* Sección para añadir productos */}
+        <View style={[styles.productFormSection, { borderColor: currentColors.border }]}>
+          <Text style={[styles.productSectionTitle, { color: currentColors.text }]}>NUEVO PRODUCTO</Text>
+          <View style={styles.productInputRow}>
+            <TextInput
+              style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+              placeholder="NOMBRE"
+              placeholderTextColor={`${currentColors.text}80`}
+              value={newProductName}
+              onChangeText={setNewProductName}
+            />
+            <TextInput
+              style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+              placeholder="$ PRECIO"
+              placeholderTextColor={`${currentColors.text}80`}
+              value={newProductPrice}
+              onChangeText={setNewProductPrice}
+              keyboardType="numeric"
+            />
+          </View>
           <TouchableOpacity
-            key={cat.id}
-            style={[styles.catOption, { borderColor: currentColors.border }]}
-            onPress={() => handleSelectCategory(cat.id)}
+            style={[styles.addProductBtn, { borderColor: currentColors.border, backgroundColor: currentColors.text }]}
+            onPress={handleAddProduct}
           >
-            <Text style={[styles.catOptionText, { color: currentColors.text }]}>
-              {cat.title.toUpperCase()}
-            </Text>
+            <Text style={[styles.addProductBtnText, { color: currentColors.background }]}>+ AÑADIR PRODUCTO</Text>
           </TouchableOpacity>
-        ))}
-      </BrutalistModal>
-
-      {/* MODAL 3: Opciones del Marcador al tocarlo */}
-      <BrutalistModal
-        visible={isOptionsModalVisible}
-        onClose={() => setIsOptionsModalVisible(false)}
-        title="OPCIONES"
-        message={selectedItem ? `¿QUÉ DESEAS HACER CON "${selectedItem.title.toUpperCase()}"?${selectedItem.dateDisplay || ''}` : ''}
-        actions={[
-          { title: 'GPS', onPress: handleOpenGPS },
-          { title: 'COMPARTIR', onPress: handleShareItem },
-          { title: 'EDITAR', onPress: startEditMarker },
-          { title: 'ELIMINAR', onPress: confirmDeleteMarker, primary: false },
-          { title: 'CANCELAR', onPress: () => setIsOptionsModalVisible(false) }
-        ]}
-      >
-        {selectedItem && selectedItem.imageUri && (
-          <Image
-            source={{ uri: selectedItem.imageUri }}
-            style={[styles.markerImage, { borderColor: currentColors.border }]}
-          />
-        )}
-        <View style={{ height: 10 }} />
-      </BrutalistModal>
-
-      {/* MODAL 4: Mensajes de Error */}
-      <BrutalistModal
-        visible={isErrorModalVisible}
-        onClose={() => setIsErrorModalVisible(false)}
-        title={errorHeader}
-        message={errorMessage}
-        actions={[{ title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }]}
-      />
-
-      {/* Modal para elegir origen de foto */}
-      <BrutalistModal
-        visible={isPhotoChoiceVisible}
-        title="AÑADIR FOTO"
-        onClose={() => setIsPhotoChoiceVisible(false)}
-        actions={[{ title: 'CANCELAR', onPress: () => setIsPhotoChoiceVisible(false) }]}
-      >
-        <View style={{ gap: 10 }}>
-          <BrutalistButton title="📷 CÁMARA" onPress={handleCamera} />
-          <BrutalistButton title="🖼️ GALERÍA" onPress={handleGallery} />
         </View>
-      </BrutalistModal>
 
-      {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */}
-      <BrutalistModal
-        visible={isNewCategoryModalVisible}
-        onClose={() => setIsNewCategoryModalVisible(false)}
-        title="NUEVA CARPETA"
-        actions={[
-          { title: 'CANCELAR', onPress: () => setIsNewCategoryModalVisible(false) },
-          { title: 'CREAR', onPress: confirmCreateCategoryFromMap, primary: true }
-        ]}
-      >
-        <TextInput
-          style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="NOMBRE DE CARPETA..."
-          placeholderTextColor={`${currentColors.text}80`}
-          value={newCategoryName}
-          onChangeText={setNewCategoryName}
-          autoFocus={true}
+        {/* Lista visual de productos añadidos */}
+        {newNoteProducts.length > 0 && (
+          <View style={[styles.productsListContainer, { borderColor: currentColors.border }]}>
+            {newNoteProducts.map((prod) => (
+              <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border }]}>
+                <Text style={[styles.productItemName, { color: currentColors.text }]} numberOfLines={1}>
+                  {prod.nombre_producto.toUpperCase()}
+                </Text>
+
+                {/* Dots separator */}
+                <View style={styles.dotsContainer}>
+                  <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
+                    ....................................................................
+                  </Text>
+                </View>
+
+                <Text style={[styles.productItemPrice, { color: currentColors.text }]}>
+                  ${prod.precio}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.productDeleteBtn, { borderColor: currentColors.border }]}
+                  onPress={() => handleRemoveProduct(prod.id_producto)}
+                >
+                  <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <View style={styles.totalRow}>
+              <Text style={[styles.totalText, { color: currentColors.text }]}>TOTAL:</Text>
+              <Text style={[styles.totalValue, { color: currentColors.text }]}>
+                ${newNoteProducts.reduce((sum, p) => sum + Number(p.precio), 0)}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Image Picker */}
+        {newNoteImage && (
+          <Image source={{ uri: newNoteImage }} style={[styles.previewImage, { borderColor: currentColors.border }]} />
+        )}
+        <BrutalistButton
+          title={newNoteImage ? "CAMBIAR FOTO" : "AÑADIR FOTO"}
+          onPress={pickImage}
         />
-      </BrutalistModal>
+        {newNoteImage && (
+          <TouchableOpacity onPress={() => setNewNoteImage(null)} style={{ marginTop: 10 }}>
+            <Text style={[styles.deleteLinkText, { color: '#FF0000', textAlign: 'center' }]}>QUITAR FOTO</Text>
+          </TouchableOpacity>
+        )}
+    </View>
+      </BrutalistModal >
+
+    {/* MODAL 2: Seleccionar Carpeta Destino */ }
+    < BrutalistModal
+  visible = { isCategoryModalVisible }
+  onClose = {() => setIsCategoryModalVisible(false)
+}
+title = "SELECCIONAR CARPETA"
+scrollable = { true}
+forceColumn = { true}
+actions = {
+  [
+  { title: 'CANCELAR', onPress: () => setIsCategoryModalVisible(false) },
+  { title: '+ NUEVA CARPETA', onPress: handleCreateNewCategoryFromMap, primary: true, autoClose: false }
+  ]}
+  >
+{
+  categories.map(cat => (
+    <TouchableOpacity
+      key={cat.id}
+      style={[styles.catOption, { borderColor: currentColors.border }]}
+      onPress={() => handleSelectCategory(cat.id)}
+    >
+      <Text style={[styles.catOptionText, { color: currentColors.text }]}>
+        {cat.title.toUpperCase()}
+      </Text>
+    </TouchableOpacity>
+  ))
+}
+      </BrutalistModal >
+
+  {/* MODAL 3: Opciones del Marcador al tocarlo */ }
+  < BrutalistModal
+visible = { isOptionsModalVisible }
+onClose = {() => setIsOptionsModalVisible(false)}
+title = "OPCIONES"
+message = { selectedItem? `¿QUÉ DESEAS HACER CON "${selectedItem.title.toUpperCase()}"?${selectedItem.dateDisplay || ''}` : ''}
+actions = {
+  [
+  { title: 'GPS', onPress: handleOpenGPS },
+  { title: 'COMPARTIR', onPress: handleShareItem },
+  { title: 'EDITAR', onPress: startEditMarker },
+  { title: 'ELIMINAR', onPress: confirmDeleteMarker, primary: false },
+  { title: 'CANCELAR', onPress: () => setIsOptionsModalVisible(false) }
+  ]}
+  >
+  { selectedItem && selectedItem.imageUri && (
+    <Image
+      source={{ uri: selectedItem.imageUri }}
+      style={[styles.markerImage, { borderColor: currentColors.border }]}
+    />
+  )}
+<View style={{ height: 10 }} />
+      </BrutalistModal >
+
+  {/* MODAL 4: Mensajes de Error */ }
+  < BrutalistModal
+visible = { isErrorModalVisible }
+onClose = {() => setIsErrorModalVisible(false)}
+title = { errorHeader }
+message = { errorMessage }
+actions = { [{ title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }]}
+  />
+
+  {/* Modal para elegir origen de foto */ }
+  < BrutalistModal
+visible = { isPhotoChoiceVisible }
+title = "AÑADIR FOTO"
+onClose = {() => setIsPhotoChoiceVisible(false)}
+actions = { [{ title: 'CANCELAR', onPress: () => setIsPhotoChoiceVisible(false) }]}
+  >
+  <View style={{ gap: 10 }}>
+    <BrutalistButton title="📷 CÁMARA" onPress={handleCamera} />
+    <BrutalistButton title="🖼️ GALERÍA" onPress={handleGallery} />
+  </View>
+      </BrutalistModal >
+
+  {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */ }
+  < BrutalistModal
+visible = { isNewCategoryModalVisible }
+onClose = {() => setIsNewCategoryModalVisible(false)}
+title = "NUEVA CARPETA"
+actions = {
+  [
+  { title: 'CANCELAR', onPress: () => setIsNewCategoryModalVisible(false) },
+  { title: 'CREAR', onPress: confirmCreateCategoryFromMap, primary: true }
+  ]}
+  >
+  <TextInput
+    style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
+    placeholder="NOMBRE DE CARPETA..."
+    placeholderTextColor={`${currentColors.text}80`}
+    value={newCategoryName}
+    onChangeText={setNewCategoryName}
+    autoFocus={true}
+  />
+      </BrutalistModal >
     </View >
   );
 }
@@ -543,6 +661,95 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
   },
+  // Nuevos estilos para formulado de productos (Fase 7)
+  productFormSection: {
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 15,
+  },
+  productSectionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  productInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  productNameInput: {
+    flex: 2,
+  },
+  productPriceInput: {
+    flex: 1,
+  },
+  addProductBtn: {
+    borderWidth: 1,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addProductBtnText: {
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  productsListContainer: {
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 15,
+  },
+  productItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomStyle: 'dashed', // Intentar línea punteada real
+  },
+  productItemName: {
+    fontWeight: 'bold',
+    fontSize: 14,
+    maxWidth: '40%',
+  },
+  dotsContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 4,
+  },
+  dotsText: {
+    fontSize: 14,
+    opacity: 0.5,
+  },
+  productItemPrice: {
+    fontWeight: '900',
+    fontSize: 14,
+    marginLeft: 10,
+  },
+  productDeleteBtn: {
+    borderWidth: 1,
+    padding: 5,
+    marginLeft: 10,
+    width: 30,
+    alignItems: 'center',
+  },
+  productDeleteBtnText: {
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    marginTop: 5,
+  },
+  totalText: {
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  totalValue: {
+    fontWeight: '900',
+    fontSize: 18,
+  },
+  // Resto de estilos antiguos...
   textArea: {
     height: 100,
     textAlignVertical: 'top',
