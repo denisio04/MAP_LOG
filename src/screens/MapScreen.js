@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Text, ActivityIndicator, TextInput, TouchableOpacity, Linking, Share, Image } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator, TextInput, TouchableOpacity, Linking, Share, Image, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
-import * as ImagePicker from 'expo-image-picker';
 import { useStore } from '../store/useStore';
 import { colors } from '../theme/colors';
 import BrutalistModal from '../components/BrutalistModal';
@@ -56,9 +55,6 @@ export default function MapScreen({ route }) {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [lastCoordinate, setLastCoordinate] = useState(null); // Dónde pulsaste en el mapa
   const [tempCategoryId, setTempCategoryId] = useState(categoryId || null); // Carpeta destino temporal
-
-  const [newNoteImage, setNewNoteImage] = useState(null); // URI de la imagen de la nota
-  const [isPhotoChoiceVisible, setIsPhotoChoiceVisible] = useState(false);
 
   // Actualiza los ítems si cambian los parámetros de ruta
   useEffect(() => {
@@ -141,7 +137,6 @@ export default function MapScreen({ route }) {
     setIsEditing(true);
     setNewNoteTitle(item.title);
     setNewNoteProducts(item.productos || []);
-    setNewNoteImage(item.imageUri || null);
     setLastCoordinate({ latitude: item.latitude, longitude: item.longitude });
 
     setIsOptionsModalVisible(false);
@@ -194,53 +189,6 @@ export default function MapScreen({ route }) {
     }
   };
 
-  // Función para abrir la cámara
-  const handleCamera = async () => {
-    setIsPhotoChoiceVisible(false);
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      setErrorHeader("ERROR");
-      setErrorMessage("SE REQUIERE PERMISO PARA USAR LA CÁMARA.");
-      setIsErrorModalVisible(true);
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 0.7,
-    });
-
-    if (!result.canceled) {
-      setNewNoteImage(result.assets[0].uri);
-    }
-  };
-
-  // Función para abrir la galería
-  const handleGallery = async () => {
-    setIsPhotoChoiceVisible(false);
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      setErrorHeader("ERROR");
-      setErrorMessage("SE REQUIERE PERMISO PARA ACCEDER A LAS FOTOS.");
-      setIsErrorModalVisible(true);
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.7,
-    });
-
-    if (!result.canceled) {
-      setNewNoteImage(result.assets[0].uri);
-    }
-  };
-
-  const pickImage = () => {
-    setIsPhotoChoiceVisible(true);
-  };
-
   // Limpia el formulario antes de abrir el modal de nota
   const prepareNoteModal = (editing) => {
     setIsEditing(editing);
@@ -250,7 +198,6 @@ export default function MapScreen({ route }) {
       setNewNoteProducts([]);
       setNewProductName('');
       setNewProductPrice('');
-      setNewNoteImage(null);
     }
     setIsNoteModalVisible(true);
   };
@@ -283,6 +230,16 @@ export default function MapScreen({ route }) {
     setNewProductPrice('');
   };
 
+  // Actualizar producto de la lista temporal
+  const handleUpdateProduct = (prodId, field, value) => {
+    setNewNoteProducts(prev => prev.map(p => {
+      if (p.id_producto === prodId) {
+        return { ...p, [field]: value };
+      }
+      return p;
+    }));
+  };
+
   // Quitar producto de la lista temporal
   const handleRemoveProduct = (prodId) => {
     setNewNoteProducts(prev => prev.filter(p => p.id_producto !== prodId));
@@ -311,7 +268,6 @@ export default function MapScreen({ route }) {
       const updatedData = {
         title: newNoteTitle.trim(),
         productos: newNoteProducts,
-        imageUri: newNoteImage
       };
       useStore.getState().updateItem(targetCategoryId, editingItemId, updatedData);
       setItems(prev => prev.map(item => item.id === editingItemId ? { ...item, ...updatedData } : item));
@@ -324,7 +280,6 @@ export default function MapScreen({ route }) {
         productos: newNoteProducts,
         latitude: lastCoordinate.latitude,
         longitude: lastCoordinate.longitude,
-        imageUri: newNoteImage,
         createdAt: Date.now()
       };
 
@@ -392,7 +347,7 @@ export default function MapScreen({ route }) {
           let markerDesc = '';
           if (item.productos && item.productos.length > 0) {
             const total = item.productos.reduce((sum, p) => sum + Number(p.precio), 0);
-            markerDesc = `${item.productos.length} PRODUCTOS - $${total}`;
+            markerDesc = `${item.productos.length} PRODUCTOS `;
           }
 
           return (
@@ -428,17 +383,17 @@ export default function MapScreen({ route }) {
       <BrutalistModal
         visible={isNoteModalVisible}
         onClose={() => setIsNoteModalVisible(false)}
-        title={isEditing ? 'EDITAR POS' : 'NUEVO POS'}
-        scrollable={true}
+        title={isEditing ? 'EDITAR LOG' : 'NUEVO LOG'}
+        scrollable={false}
         actions={[
           { title: 'CANCELAR', onPress: () => setIsNoteModalVisible(false) },
-          { title: 'GUARDAR POS', onPress: handleSaveNote, primary: true }
+          { title: 'GUARDAR', onPress: handleSaveNote, primary: true }
         ]}
       >
         <TextInput
           style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="NOMBRE DEL PUNTO DE VENTA (POS)"
-          placeholderTextColor={`${currentColors.text}80`}
+          placeholder="NOMBRE"
+          placeholderTextColor="#9e9e9e"
           value={newNoteTitle}
           onChangeText={setNewNoteTitle}
         />
@@ -450,14 +405,14 @@ export default function MapScreen({ route }) {
             <TextInput
               style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
               placeholder="NOMBRE"
-              placeholderTextColor={`${currentColors.text}80`}
+              placeholderTextColor="#9e9e9e"
               value={newProductName}
               onChangeText={setNewProductName}
             />
             <TextInput
               style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
               placeholder="$ PRECIO"
-              placeholderTextColor={`${currentColors.text}80`}
+              placeholderTextColor="#9e9e9e"
               value={newProductPrice}
               onChangeText={setNewProductPrice}
               keyboardType="numeric"
@@ -473,151 +428,125 @@ export default function MapScreen({ route }) {
 
         {/* Lista visual de productos añadidos */}
         {newNoteProducts.length > 0 && (
-          <View style={[styles.productsListContainer, { borderColor: currentColors.border }]}>
+          <ScrollView
+            style={[styles.productsListContainer, { borderColor: currentColors.border, maxHeight: 200 }]}
+            contentContainerStyle={{ paddingBottom: 0 }}
+          >
             {newNoteProducts.map((prod) => (
               <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border }]}>
-                <Text style={[styles.productItemName, { color: currentColors.text }]} numberOfLines={1}>
-                  {prod.nombre_producto.toUpperCase()}
-                </Text>
+                <TextInput
+                  style={[styles.productItemNameInput, { color: currentColors.text, flex: 2 }]}
+                  value={prod.nombre_producto}
+                  onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'nombre_producto', val)}
+                  placeholder="NOMBRE"
+                  placeholderTextColor="#9e9e9e"
+                />
 
                 {/* Dots separator */}
                 <View style={styles.dotsContainer}>
                   <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
-                    ....................................................................
+                    ...
                   </Text>
                 </View>
 
-                <Text style={[styles.productItemPrice, { color: currentColors.text }]}>
-                  ${prod.precio}
-                </Text>
-                <TouchableOpacity
-                  style={[styles.productDeleteBtn, { borderColor: currentColors.border }]}
-                  onPress={() => handleRemoveProduct(prod.id_producto)}
-                >
-                  <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <Text style={[{ color: currentColors.text, fontWeight: '500', fontSize: 14, textAlign: 'right' }]}>$</Text>
+                  <TextInput
+                    style={[styles.productItemPriceInput, { color: currentColors.text, minWidth: 40, textAlign: 'left' }]}
+                    value={prod.precio.toString()}
+                    onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'precio', val)}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor="#9e9e9e"
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.productDeleteBtn, { borderColor: currentColors.border, marginLeft: 5 }]}
+                    onPress={() => handleRemoveProduct(prod.id_producto)}
+                  >
+                    <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ))}
+          </ScrollView>
+        )}</BrutalistModal>
 
-            <View style={styles.totalRow}>
-              <Text style={[styles.totalText, { color: currentColors.text }]}>TOTAL:</Text>
-              <Text style={[styles.totalValue, { color: currentColors.text }]}>
-                ${newNoteProducts.reduce((sum, p) => sum + Number(p.precio), 0)}
+      {/* MODAL 2: Seleccionar Carpeta Destino */}
+      < BrutalistModal
+        visible={isCategoryModalVisible}
+        onClose={() => setIsCategoryModalVisible(false)
+        }
+        title="SELECCIONAR CARPETA"
+        scrollable={true}
+        forceColumn={true}
+        actions={
+          [
+            { title: 'CANCELAR', onPress: () => setIsCategoryModalVisible(false) },
+            { title: '+ NUEVA CARPETA', onPress: handleCreateNewCategoryFromMap, primary: true, autoClose: false }
+          ]}
+      >
+        {
+          categories.map(cat => (
+            <TouchableOpacity
+              key={cat.id}
+              style={[styles.catOption, { borderColor: currentColors.border }]}
+              onPress={() => handleSelectCategory(cat.id)}
+            >
+              <Text style={[styles.catOptionText, { color: currentColors.text }]}>
+                {cat.title.toUpperCase()}
               </Text>
-            </View>
-          </View>
-        )}
+            </TouchableOpacity>
+          ))
+        }
+      </BrutalistModal >
 
-        {/* Image Picker */}
-        {newNoteImage && (
-          <Image source={{ uri: newNoteImage }} style={[styles.previewImage, { borderColor: currentColors.border }]} />
-        )}
-        <BrutalistButton
-          title={newNoteImage ? "CAMBIAR FOTO" : "AÑADIR FOTO"}
-          onPress={pickImage}
+      {/* MODAL 3: Opciones del Marcador al tocarlo */}
+      < BrutalistModal
+        visible={isOptionsModalVisible}
+        onClose={() => setIsOptionsModalVisible(false)}
+        title="OPCIONES"
+        message={selectedItem ? `¿QUÉ DESEAS HACER CON "${selectedItem.title.toUpperCase()}"?${selectedItem.dateDisplay || ''}` : ''}
+        actions={
+          [
+            { title: 'GPS', onPress: handleOpenGPS },
+            { title: 'COMPARTIR', onPress: handleShareItem },
+            { title: 'EDITAR', onPress: startEditMarker },
+            { title: 'ELIMINAR', onPress: confirmDeleteMarker, primary: false },
+            { title: 'CANCELAR', onPress: () => setIsOptionsModalVisible(false) }
+          ]}
+      >
+        <View style={{ height: 10 }} />
+      </BrutalistModal >
+
+      {/* MODAL 4: Mensajes de Error */}
+      < BrutalistModal
+        visible={isErrorModalVisible}
+        onClose={() => setIsErrorModalVisible(false)}
+        title={errorHeader}
+        message={errorMessage}
+        actions={[{ title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }]}
+      />
+
+      {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */}
+      < BrutalistModal
+        visible={isNewCategoryModalVisible}
+        onClose={() => setIsNewCategoryModalVisible(false)}
+        title="NUEVA CARPETA"
+        actions={
+          [
+            { title: 'CANCELAR', onPress: () => setIsNewCategoryModalVisible(false) },
+            { title: 'CREAR', onPress: confirmCreateCategoryFromMap, primary: true }
+          ]}
+      >
+        <TextInput
+          style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
+          placeholder="NOMBRE DE CARPETA..."
+          placeholderTextColor="#9e9e9e"
+          value={newCategoryName}
+          onChangeText={setNewCategoryName}
+          autoFocus={true}
         />
-        {newNoteImage && (
-          <TouchableOpacity onPress={() => setNewNoteImage(null)} style={{ marginTop: 10 }}>
-            <Text style={[styles.deleteLinkText, { color: '#FF0000', textAlign: 'center' }]}>QUITAR FOTO</Text>
-          </TouchableOpacity>
-        )}
-    </View>
-      </BrutalistModal >
-
-    {/* MODAL 2: Seleccionar Carpeta Destino */ }
-    < BrutalistModal
-  visible = { isCategoryModalVisible }
-  onClose = {() => setIsCategoryModalVisible(false)
-}
-title = "SELECCIONAR CARPETA"
-scrollable = { true}
-forceColumn = { true}
-actions = {
-  [
-  { title: 'CANCELAR', onPress: () => setIsCategoryModalVisible(false) },
-  { title: '+ NUEVA CARPETA', onPress: handleCreateNewCategoryFromMap, primary: true, autoClose: false }
-  ]}
-  >
-{
-  categories.map(cat => (
-    <TouchableOpacity
-      key={cat.id}
-      style={[styles.catOption, { borderColor: currentColors.border }]}
-      onPress={() => handleSelectCategory(cat.id)}
-    >
-      <Text style={[styles.catOptionText, { color: currentColors.text }]}>
-        {cat.title.toUpperCase()}
-      </Text>
-    </TouchableOpacity>
-  ))
-}
-      </BrutalistModal >
-
-  {/* MODAL 3: Opciones del Marcador al tocarlo */ }
-  < BrutalistModal
-visible = { isOptionsModalVisible }
-onClose = {() => setIsOptionsModalVisible(false)}
-title = "OPCIONES"
-message = { selectedItem? `¿QUÉ DESEAS HACER CON "${selectedItem.title.toUpperCase()}"?${selectedItem.dateDisplay || ''}` : ''}
-actions = {
-  [
-  { title: 'GPS', onPress: handleOpenGPS },
-  { title: 'COMPARTIR', onPress: handleShareItem },
-  { title: 'EDITAR', onPress: startEditMarker },
-  { title: 'ELIMINAR', onPress: confirmDeleteMarker, primary: false },
-  { title: 'CANCELAR', onPress: () => setIsOptionsModalVisible(false) }
-  ]}
-  >
-  { selectedItem && selectedItem.imageUri && (
-    <Image
-      source={{ uri: selectedItem.imageUri }}
-      style={[styles.markerImage, { borderColor: currentColors.border }]}
-    />
-  )}
-<View style={{ height: 10 }} />
-      </BrutalistModal >
-
-  {/* MODAL 4: Mensajes de Error */ }
-  < BrutalistModal
-visible = { isErrorModalVisible }
-onClose = {() => setIsErrorModalVisible(false)}
-title = { errorHeader }
-message = { errorMessage }
-actions = { [{ title: 'ACEPTAR', onPress: () => setIsErrorModalVisible(false), primary: true }]}
-  />
-
-  {/* Modal para elegir origen de foto */ }
-  < BrutalistModal
-visible = { isPhotoChoiceVisible }
-title = "AÑADIR FOTO"
-onClose = {() => setIsPhotoChoiceVisible(false)}
-actions = { [{ title: 'CANCELAR', onPress: () => setIsPhotoChoiceVisible(false) }]}
-  >
-  <View style={{ gap: 10 }}>
-    <BrutalistButton title="📷 CÁMARA" onPress={handleCamera} />
-    <BrutalistButton title="🖼️ GALERÍA" onPress={handleGallery} />
-  </View>
-      </BrutalistModal >
-
-  {/* MODAL 5: Crear Carpeta Nueva (desde el mapa) */ }
-  < BrutalistModal
-visible = { isNewCategoryModalVisible }
-onClose = {() => setIsNewCategoryModalVisible(false)}
-title = "NUEVA CARPETA"
-actions = {
-  [
-  { title: 'CANCELAR', onPress: () => setIsNewCategoryModalVisible(false) },
-  { title: 'CREAR', onPress: confirmCreateCategoryFromMap, primary: true }
-  ]}
-  >
-  <TextInput
-    style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-    placeholder="NOMBRE DE CARPETA..."
-    placeholderTextColor={`${currentColors.text}80`}
-    value={newCategoryName}
-    onChangeText={setNewCategoryName}
-    autoFocus={true}
-  />
       </BrutalistModal >
     </View >
   );
@@ -635,7 +564,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   warningText: {
-    fontWeight: 'bold',
+    fontWeight: '500',
     fontSize: 12,
   },
   footer: {
@@ -647,21 +576,21 @@ const styles = StyleSheet.create({
   },
   footerTitle: {
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '500',
     textTransform: 'uppercase',
   },
   footerCount: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '500',
   },
   modalInput: {
     borderWidth: 1,
     padding: 15,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 15,
   },
-  // Nuevos estilos para formulado de productos (Fase 7)
+  // Nuevos estilos para formulado de productos
   productFormSection: {
     borderWidth: 1,
     padding: 10,
@@ -669,7 +598,7 @@ const styles = StyleSheet.create({
   },
   productSectionTitle: {
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '500',
     marginBottom: 10,
   },
   productInputRow: {
@@ -682,6 +611,7 @@ const styles = StyleSheet.create({
   },
   productPriceInput: {
     flex: 1,
+    textAlign: 'right',
   },
   addProductBtn: {
     borderWidth: 1,
@@ -690,13 +620,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addProductBtnText: {
-    fontWeight: '900',
+    fontWeight: '500',
     fontSize: 14,
   },
   productsListContainer: {
     borderWidth: 1,
-    padding: 10,
-    marginBottom: 15,
+    paddingHorizontal: 10,
+    marginBottom: 5,
   },
   productItemRow: {
     flexDirection: 'row',
@@ -706,12 +636,18 @@ const styles = StyleSheet.create({
     borderBottomStyle: 'dashed', // Intentar línea punteada real
   },
   productItemName: {
-    fontWeight: 'bold',
+    fontWeight: '500',
     fontSize: 14,
     maxWidth: '40%',
   },
+  productItemNameInput: {
+    fontWeight: '500',
+    fontSize: 14,
+    padding: 0,
+    textTransform: 'uppercase',
+  },
   dotsContainer: {
-    flex: 1,
+    flex: 0,
     overflow: 'hidden',
     paddingHorizontal: 4,
   },
@@ -720,9 +656,16 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   productItemPrice: {
-    fontWeight: '900',
+    fontWeight: '500',
     fontSize: 14,
     marginLeft: 10,
+  },
+  productItemPriceInput: {
+    fontWeight: '500',
+    fontSize: 14,
+    padding: 0,
+    marginLeft: 2,
+    textAlign: 'right',
   },
   productDeleteBtn: {
     borderWidth: 1,
@@ -732,7 +675,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   productDeleteBtnText: {
-    fontWeight: '900',
+    fontWeight: '500',
     fontSize: 12,
   },
   totalRow: {
@@ -742,11 +685,11 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   totalText: {
-    fontWeight: '900',
+    fontWeight: '500',
     fontSize: 16,
   },
   totalValue: {
-    fontWeight: '900',
+    fontWeight: '500',
     fontSize: 18,
   },
   // Resto de estilos antiguos...
@@ -761,7 +704,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   catOptionText: {
-    fontWeight: 'bold',
+    fontWeight: '500',
     fontSize: 16,
   },
   imagePickerArea: {
@@ -780,7 +723,7 @@ const styles = StyleSheet.create({
   },
   deleteLinkText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '500',
     textDecorationLine: 'underline',
   }
 });

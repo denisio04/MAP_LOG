@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useStore } from '../store/useStore';
 import { colors } from '../theme/colors';
 import BrutalistButton from './BrutalistButton';
@@ -43,7 +43,11 @@ export default function BrutalistModal({
       onRequestClose={onClose}
       statusBarTranslucent={true} // Permite que el fondo cubra también la barra de estado (Android)
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
+      >
         <View style={[
           styles.content,
           {
@@ -97,7 +101,7 @@ export default function BrutalistModal({
             ))}
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -110,14 +114,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
-    borderWidth: 1, // Borde muy grueso característico
+    borderWidth: 1, // Borde 
     padding: 20,
     elevation: 20, // Sombra para Android
     margin: 20, // Espaciado desde los bordes de la pantalla
   },
   title: {
     fontSize: 22,
-    fontWeight: '900',
+    fontWeight: '500',
     marginBottom: 15,
     letterSpacing: 1,
   },
@@ -125,13 +129,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   scrollBody: {
-    maxHeight: 300, // Altura máxima antes de permitir scroll
+    maxHeight: 350, // Altura máxima antes de permitir scroll
     marginBottom: 20,
+    paddingHorizontal: 2, // Añadido para que los bordes de los inputs no se corten
   },
   message: {
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '500',
+    fontWeight: '300',
   },
   actions: {
     justifyContent: 'space-between',

@@ -29,7 +29,8 @@ export default function AppNavigator() {
           },
           headerTintColor: currentColors.text,
           headerTitleStyle: {
-            fontWeight: '900',
+            fontWeight: '400',
+            fontSize: 25,
             letterSpacing: 1,
             textTransform: 'uppercase',
           },

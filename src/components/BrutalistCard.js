@@ -86,13 +86,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '500',
     flex: 1,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
     marginTop: 8,
+    fontWeight: '300',
     fontFamily: Platform.select({ ios: 'Courier', android: 'monospace' }),
     opacity: 0.8,
   },
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '500',
     fontFamily: Platform.select({ ios: 'Courier', android: 'monospace' }),
     letterSpacing: 1,
   },

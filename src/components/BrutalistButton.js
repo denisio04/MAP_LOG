@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '500',
     letterSpacing: 2,
     // Usamos tipografía de tipo "máquina de escribir" según la plataforma
     fontFamily: Platform.select({ ios: 'Courier', android: 'monospace' }),

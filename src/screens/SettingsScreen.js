@@ -217,7 +217,7 @@ export default function SettingsScreen() {
         <Text style={[styles.modalContentText, { color: currentColors.text }]}>
           ESTO REEMPLAZARÁ TODOS TUS MARCADORES Y CARPETAS ACTUALES POR LOS DEL BACKUP.
         </Text>
-        <Text style={[styles.modalContentText, { color: currentColors.text, marginTop: 10, fontWeight: '900' }]}>
+        <Text style={[styles.modalContentText, { color: currentColors.text, marginTop: 10, fontWeight: '500' }]}>
           ¿DESEAS CONTINUAR?
         </Text>
       </BrutalistModal>
@@ -235,11 +235,11 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     marginBottom: 16,
-    fontWeight: 'bold',
+    fontWeight: '500',
   },
   modalContentText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '500',
     textAlign: 'center',
     marginBottom: 10,
   },
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: '500',
     letterSpacing: 2,
   },
   buttonRow: {

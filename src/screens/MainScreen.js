@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   headerButtonText: {
-    fontWeight: 'bold',
+    fontWeight: '500',
     fontSize: 12,
     letterSpacing: 1,
   },
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 12,
     height: 45,
-    fontWeight: 'bold',
+    fontWeight: '300',
     fontSize: 14,
   },
   addButton: {
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '500',
   }
 });
 
