@@ -1,35 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/**
- * DATOS DE PRUEBA (MOCK_CATEGORIES)
- * Estos se usan la primera vez que abres la app o si no hay datos guardados.
- */
-const MOCK_CATEGORIES = [
-  {
-    id: 'c1',
-    title: 'Compra de comida',
-    items: [
-      { id: 'i1', title: 'Pomo de Nutella', productos: [{ id_producto: 'p1', nombre_producto: 'Nutella 500g', precio: 300 }], latitude: 40.4168, longitude: -3.7038 },
-      { id: 'i2', title: 'Pan de Molde', productos: [{ id_producto: 'p2', nombre_producto: 'Pan Blanco', precio: 250 }], latitude: 40.4170, longitude: -3.7045 },
-    ]
-  },
-  {
-    id: 'c2',
-    title: 'Productos del hogar',
-    items: [
-      { id: 'i3', title: 'Detergente', productos: [{ id_producto: 'p3', nombre_producto: 'Lavavajillas', precio: 150 }], latitude: 40.4150, longitude: -3.7020 },
-      { id: 'i4', title: 'Bombillas LED', productos: [{ id_producto: 'p4', nombre_producto: 'LED 10W', precio: 50 }], latitude: 40.4180, longitude: -3.7010 },
-    ]
-  },
-  {
-    id: 'c3',
-    title: 'Cafeterías por visitar',
-    items: [
-      { id: 'i5', title: 'Café de Especialidad', productos: [{ id_producto: 'p5', nombre_producto: 'Cafe Latte', precio: 200 }, { id_producto: 'p6', nombre_producto: 'Croissant', precio: 120 }], latitude: 40.4195, longitude: -3.7060 },
-    ]
-  }
-];
 
 /**
  * ALMACENAMIENTO GLOBAL (Zustand)
@@ -37,7 +8,7 @@ const MOCK_CATEGORIES = [
  */
 export const useStore = create((set, get) => ({
   theme: 'light', // Tema actual: 'light' o 'dark'
-  categories: MOCK_CATEGORIES, // Lista de carpetas y sus notas
+  categories: [], // Lista de carpetas y sus notas
   defaultLocation: null, // Ubicación central del mapa si no hay notas
   isLoaded: false, // Indica si ya se cargaron los datos del teléfono
 
@@ -144,8 +115,8 @@ export const useStore = create((set, get) => ({
 
       set({
         theme: theme || 'light',
-        // Si hay categorías guardadas las usamos, si no, usamos las de prueba
-        categories: savedCategories ? JSON.parse(savedCategories) : MOCK_CATEGORIES,
+        // Si hay categorías guardadas las usamos, si no, empezamos vacío
+        categories: savedCategories ? JSON.parse(savedCategories) : [],
         defaultLocation: defaultLocation ? JSON.parse(defaultLocation) : null,
         isLoaded: true,
       });

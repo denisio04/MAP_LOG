@@ -40,6 +40,7 @@ export default function MapScreen({ route }) {
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);   // Opciones al tocar marcador
   const [isErrorModalVisible, setIsErrorModalVisible] = useState(false);       // Errores
   const [isNewCategoryModalVisible, setIsNewCategoryModalVisible] = useState(false); // Crear carpeta desde mapa
+  const [isTypeModalVisible, setIsTypeModalVisible] = useState(false);         // Elegir Lista o Nota
 
   const [errorHeader, setErrorHeader] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -55,6 +56,9 @@ export default function MapScreen({ route }) {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [lastCoordinate, setLastCoordinate] = useState(null); // Dónde pulsaste en el mapa
   const [tempCategoryId, setTempCategoryId] = useState(categoryId || null); // Carpeta destino temporal
+  const [entryType, setEntryType] = useState('list'); // 'list' o 'note'
+  const [noteDescription, setNoteDescription] = useState(''); // Para el tipo 'note'
+  const [expandedProductIds, setExpandedProductIds] = useState(new Set());
 
   // Actualiza los ítems si cambian los parámetros de ruta
   useEffect(() => {
@@ -137,6 +141,8 @@ export default function MapScreen({ route }) {
     setIsEditing(true);
     setNewNoteTitle(item.title);
     setNewNoteProducts(item.productos || []);
+    setEntryType(item.type || 'list');
+    setNoteDescription(item.description || '');
     setLastCoordinate({ latitude: item.latitude, longitude: item.longitude });
 
     setIsOptionsModalVisible(false);
@@ -183,10 +189,17 @@ export default function MapScreen({ route }) {
       // Si estamos en el Mapa Global, primero pedimos elegir o crear una carpeta
       setIsCategoryModalVisible(true);
     } else {
-      // Si ya venimos de una categoría, vamos directo a crear la nota
+      // Si ya venimos de una categoría, bajamos a elegir el tipo de entrada
       setTempCategoryId(categoryId);
-      prepareNoteModal(false);
+      setIsTypeModalVisible(true);
     }
+  };
+
+  // Acción al elegir tipo de entrada
+  const handleSelectType = (type) => {
+    setEntryType(type);
+    setIsTypeModalVisible(false);
+    prepareNoteModal(false);
   };
 
   // Limpia el formulario antes de abrir el modal de nota
@@ -198,6 +211,8 @@ export default function MapScreen({ route }) {
       setNewNoteProducts([]);
       setNewProductName('');
       setNewProductPrice('');
+      setNoteDescription('');
+      // Si no es edición, ya decidimos el entryType en handleSelectType
     }
     setIsNoteModalVisible(true);
   };
@@ -245,11 +260,31 @@ export default function MapScreen({ route }) {
     setNewNoteProducts(prev => prev.filter(p => p.id_producto !== prodId));
   };
 
+  // Toggles product expansion
+  const toggleProductExpansion = (prodId) => {
+    setExpandedProductIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(prodId)) {
+        newSet.delete(prodId);
+      } else {
+        newSet.add(prodId);
+      }
+      return newSet;
+    });
+  };
+
   // Guarda la nota (Nueva o Editada)
   const handleSaveNote = () => {
-    if (!newNoteTitle.trim()) {
+    if (entryType === 'list' && !newNoteTitle.trim()) {
       setErrorHeader("ERROR");
       setErrorMessage("EL TÍTULO ES REQUERIDO");
+      setIsErrorModalVisible(true);
+      return;
+    }
+
+    if (entryType === 'note' && !noteDescription.trim()) {
+      setErrorHeader("ERROR");
+      setErrorMessage("LA DESCRIPCIÓN ES REQUERIDA");
       setIsErrorModalVisible(true);
       return;
     }
@@ -266,8 +301,10 @@ export default function MapScreen({ route }) {
     if (isEditing) {
       // Lógica de actualización
       const updatedData = {
-        title: newNoteTitle.trim(),
-        productos: newNoteProducts,
+        title: entryType === 'list' ? newNoteTitle.trim() : 'NOTA',
+        productos: entryType === 'list' ? newNoteProducts : [],
+        type: entryType,
+        description: entryType === 'note' ? noteDescription.trim() : '',
       };
       useStore.getState().updateItem(targetCategoryId, editingItemId, updatedData);
       setItems(prev => prev.map(item => item.id === editingItemId ? { ...item, ...updatedData } : item));
@@ -276,8 +313,10 @@ export default function MapScreen({ route }) {
       const newId = `item_${Date.now()}`;
       const newItem = {
         id: newId,
-        title: newNoteTitle.trim(),
-        productos: newNoteProducts,
+        title: entryType === 'list' ? newNoteTitle.trim() : 'NOTA',
+        productos: entryType === 'list' ? newNoteProducts : [],
+        type: entryType,
+        description: entryType === 'note' ? noteDescription.trim() : '',
         latitude: lastCoordinate.latitude,
         longitude: lastCoordinate.longitude,
         createdAt: Date.now()
@@ -294,7 +333,7 @@ export default function MapScreen({ route }) {
   const handleSelectCategory = (id) => {
     setTempCategoryId(id);
     setIsCategoryModalVisible(false);
-    prepareNoteModal(false);
+    setIsTypeModalVisible(true);
   };
 
   // Abre el modal para crear una carpeta nueva desde el mapa
@@ -345,7 +384,9 @@ export default function MapScreen({ route }) {
         {items && items.map(item => {
           // Generar descripción derivada (Ej: "3 PRODUCTOS - $450")
           let markerDesc = '';
-          if (item.productos && item.productos.length > 0) {
+          if (item.type === 'note') {
+            markerDesc = item.description || '';
+          } else if (item.productos && item.productos.length > 0) {
             const total = item.productos.reduce((sum, p) => sum + Number(p.precio), 0);
             markerDesc = `${item.productos.length} PRODUCTOS `;
           }
@@ -361,6 +402,19 @@ export default function MapScreen({ route }) {
           );
         })}
       </MapView>
+
+      {/* SELECCIÓN DE TIPO (LISTA O NOTA) */}
+      <BrutalistModal
+        visible={isTypeModalVisible}
+        onClose={() => setIsTypeModalVisible(false)}
+        title="¿QUÉ DESEAS CREAR?"
+        forceColumn={true}
+        actions={[
+          { title: 'LISTA DE COMPRA', onPress: () => handleSelectType('list'), primary: true },
+          { title: 'NOTA (SÓLO TEXTO)', onPress: () => handleSelectType('note'), primary: true },
+          { title: 'CANCELAR', onPress: () => setIsTypeModalVisible(false) }
+        ]}
+      />
 
       {/* Barra inferior informativa */}
       <View style={[
@@ -383,94 +437,121 @@ export default function MapScreen({ route }) {
       <BrutalistModal
         visible={isNoteModalVisible}
         onClose={() => setIsNoteModalVisible(false)}
-        title={isEditing ? 'EDITAR LOG' : 'NUEVO LOG'}
-        scrollable={false}
+        title={isEditing ? 'EDITAR' : (entryType === 'list' ? 'NUEVA LISTA' : 'NUEVA NOTA')}
+        scrollable={entryType === 'list'}
         actions={[
           { title: 'CANCELAR', onPress: () => setIsNoteModalVisible(false) },
           { title: 'GUARDAR', onPress: handleSaveNote, primary: true }
         ]}
       >
-        <TextInput
-          style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="NOMBRE"
-          placeholderTextColor="#9e9e9e"
-          value={newNoteTitle}
-          onChangeText={setNewNoteTitle}
-        />
-
-        {/* Sección para añadir productos */}
-        <View style={[styles.productFormSection, { borderColor: currentColors.border }]}>
-          <Text style={[styles.productSectionTitle, { color: currentColors.text }]}>NUEVO PRODUCTO</Text>
-          <View style={styles.productInputRow}>
+        {entryType === 'list' ? (
+          <>
             <TextInput
-              style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+              style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
               placeholder="NOMBRE"
               placeholderTextColor="#9e9e9e"
-              value={newProductName}
-              onChangeText={setNewProductName}
+              value={newNoteTitle}
+              onChangeText={setNewNoteTitle}
             />
-            <TextInput
-              style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
-              placeholder="$ PRECIO"
-              placeholderTextColor="#9e9e9e"
-              value={newProductPrice}
-              onChangeText={setNewProductPrice}
-              keyboardType="numeric"
-            />
-          </View>
-          <TouchableOpacity
-            style={[styles.addProductBtn, { borderColor: currentColors.border, backgroundColor: currentColors.text }]}
-            onPress={handleAddProduct}
-          >
-            <Text style={[styles.addProductBtnText, { color: currentColors.background }]}>+ AÑADIR PRODUCTO</Text>
-          </TouchableOpacity>
-        </View>
 
-        {/* Lista visual de productos añadidos */}
-        {newNoteProducts.length > 0 && (
-          <ScrollView
-            style={[styles.productsListContainer, { borderColor: currentColors.border, maxHeight: 200 }]}
-            contentContainerStyle={{ paddingBottom: 0 }}
-          >
-            {newNoteProducts.map((prod) => (
-              <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border }]}>
+            {/* Sección para añadir productos */}
+            <View style={[styles.productFormSection, { borderColor: currentColors.border }]}>
+              <Text style={[styles.productSectionTitle, { color: currentColors.text }]}>NUEVO PRODUCTO</Text>
+              <View style={styles.productInputRow}>
                 <TextInput
-                  style={[styles.productItemNameInput, { color: currentColors.text, flex: 2 }]}
-                  value={prod.nombre_producto}
-                  onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'nombre_producto', val)}
+                  style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
                   placeholder="NOMBRE"
                   placeholderTextColor="#9e9e9e"
+                  value={newProductName}
+                  onChangeText={setNewProductName}
                 />
-
-                {/* Dots separator */}
-                <View style={styles.dotsContainer}>
-                  <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
-                    ...
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <Text style={[{ color: currentColors.text, fontWeight: '500', fontSize: 14, textAlign: 'right' }]}>$</Text>
-                  <TextInput
-                    style={[styles.productItemPriceInput, { color: currentColors.text, minWidth: 40, textAlign: 'left' }]}
-                    value={prod.precio.toString()}
-                    onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'precio', val)}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor="#9e9e9e"
-                  />
-
-                  <TouchableOpacity
-                    style={[styles.productDeleteBtn, { borderColor: currentColors.border, marginLeft: 5 }]}
-                    onPress={() => handleRemoveProduct(prod.id_producto)}
-                  >
-                    <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
-                  </TouchableOpacity>
-                </View>
+                <TextInput
+                  style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+                  placeholder="$ PRECIO"
+                  placeholderTextColor="#9e9e9e"
+                  value={newProductPrice}
+                  onChangeText={setNewProductPrice}
+                  keyboardType="numeric"
+                />
               </View>
-            ))}
-          </ScrollView>
-        )}</BrutalistModal>
+              <TouchableOpacity
+                style={[styles.addProductBtn, { borderColor: currentColors.border, backgroundColor: currentColors.text }]}
+                onPress={handleAddProduct}
+              >
+                <Text style={[styles.addProductBtnText, { color: currentColors.background }]}>+ AÑADIR PRODUCTO</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Lista visual de productos añadidos */}
+            {newNoteProducts.length > 0 && (
+              <ScrollView
+                style={[styles.productsListContainer, { borderColor: currentColors.border, maxHeight: 200 }]}
+                contentContainerStyle={{ paddingBottom: 0 }}
+              >
+                {newNoteProducts.map((prod) => {
+                  const isExpanded = expandedProductIds.has(prod.id_producto);
+                  return (
+                    <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border, flexDirection: isExpanded ? 'column' : 'row', alignItems: isExpanded ? 'stretch' : 'center' }]}>
+                      <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center' }}>
+                        <TextInput
+                          style={[styles.productItemNameInput, { color: currentColors.text, flex: 1 }]}
+                          value={prod.nombre_producto}
+                          onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'nombre_producto', val)}
+                          placeholder="NOMBRE"
+                          placeholderTextColor="#9e9e9e"
+                          multiline={isExpanded}
+                          numberOfLines={isExpanded ? undefined : 1}
+                        />
+                        <TouchableOpacity onPress={() => toggleProductExpansion(prod.id_producto)} style={{ padding: 5 }}>
+                          <Text style={{ color: currentColors.border, fontSize: 10 }}>{isExpanded ? '[ - ]' : '[ + ]'}</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {!isExpanded && (
+                        <View style={styles.dotsContainer}>
+                          <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
+                            ...
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: isExpanded ? 5 : 0 }}>
+                        <Text style={[{ color: currentColors.text, fontWeight: '500', fontSize: 14, textAlign: 'right' }]}>$</Text>
+                        <TextInput
+                          style={[styles.productItemPriceInput, { color: currentColors.text, minWidth: 40, textAlign: 'left' }]}
+                          value={prod.precio.toString()}
+                          onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'precio', val)}
+                          keyboardType="numeric"
+                          placeholder="0"
+                          placeholderTextColor="#9e9e9e"
+                        />
+
+                        <TouchableOpacity
+                          style={[styles.productDeleteBtn, { borderColor: currentColors.border, marginLeft: 5 }]}
+                          onPress={() => handleRemoveProduct(prod.id_producto)}
+                        >
+                          <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </>
+        ) : (
+          <TextInput
+            style={[styles.modalInput, styles.textArea, { color: currentColors.text, borderColor: currentColors.border }]}
+            placeholder="ESCRIBE TU NOTA AQUÍ..."
+            placeholderTextColor="#9e9e9e"
+            value={noteDescription}
+            onChangeText={setNoteDescription}
+            multiline={true}
+            numberOfLines={4}
+            autoFocus={true}
+          />
+        )}
+      </BrutalistModal>
 
       {/* MODAL 2: Seleccionar Carpeta Destino */}
       < BrutalistModal

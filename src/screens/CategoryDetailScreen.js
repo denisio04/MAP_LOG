@@ -39,12 +39,15 @@ export default function CategoryDetailScreen({ route, navigation }) {
   const [editProducts, setEditProducts] = React.useState([]); // Cambio a array
   const [editProductName, setEditProductName] = React.useState(''); // Input temp
   const [editProductPrice, setEditProductPrice] = React.useState(''); // Input temp
+  const [editDescription, setEditDescription] = React.useState('');
+  const [editType, setEditType] = React.useState('list');
 
   // Estados para ordenación y ubicación
   const [userLocation, setUserLocation] = React.useState(null);
   const [sortByDistance, setSortByDistance] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortOrder, setSortOrder] = React.useState(null); // 'ASC' o null
+  const [expandedProductIds, setExpandedProductIds] = React.useState(new Set()); // IDs de productos expandidos
 
   // Obtener ubicación del usuario para calcular distancias
   React.useEffect(() => {
@@ -64,11 +67,13 @@ export default function CategoryDetailScreen({ route, navigation }) {
 
     const query = searchQuery.trim().toLowerCase();
 
-    // 1. Filtrar por búsqueda de producto
+    // 1. Filtrar por búsqueda de producto o descripción de nota
     if (query) {
-      list = list.filter(item =>
-        item.productos && item.productos.some(p => p.nombre_producto.toLowerCase().includes(query))
-      );
+      list = list.filter(item => {
+        const productMatch = item.productos && item.productos.some(p => p.nombre_producto.toLowerCase().includes(query));
+        const descriptionMatch = item.type === 'note' && item.description && item.description.toLowerCase().includes(query);
+        return productMatch || descriptionMatch;
+      });
 
       // 2. Ordenar por precio del producto coincidente si sortOrder === 'ASC'
       if (sortOrder === 'ASC') {
@@ -96,6 +101,37 @@ export default function CategoryDetailScreen({ route, navigation }) {
 
     return list;
   }, [category, sortByDistance, userLocation, searchQuery, sortOrder]);
+
+  // Maneja el toggle de ordenación por distancia y activa GPS
+  const handleToggleDistanceSort = async () => {
+    if (!sortByDistance) {
+      // Si se está activando, pedimos ubicación inmediatamente
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        let location = await Location.getCurrentPositionAsync({});
+        setUserLocation(location.coords);
+        setSortByDistance(true);
+      } else {
+        // Si no hay permiso, podrías mostrar un error, pero aquí solo ignoramos
+        console.log("Permiso denegado");
+      }
+    } else {
+      setSortByDistance(false);
+    }
+  };
+
+  // Maneja la expansión de un producto
+  const toggleProductExpansion = (prodId) => {
+    setExpandedProductIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(prodId)) {
+        newSet.delete(prodId);
+      } else {
+        newSet.add(prodId);
+      }
+      return newSet;
+    });
+  };
 
   // Navega al mapa mostrando TODOS los ítems de esta categoría
   const handleGoToMap = () => {
@@ -134,6 +170,8 @@ export default function CategoryDetailScreen({ route, navigation }) {
     setItemToEdit(item);
     setEditTitle(item.title);
     setEditProducts(item.productos || []);
+    setEditDescription(item.description || '');
+    setEditType(item.type || 'list');
     setIsEditModalVisible(true);
   };
 
@@ -176,11 +214,14 @@ export default function CategoryDetailScreen({ route, navigation }) {
 
   // Guarda los cambios realizados en el ítem
   const handleSaveEdit = () => {
-    if (!editTitle.trim()) return;
+    if (editType === 'list' && !editTitle.trim()) return;
+    if (editType === 'note' && !editDescription.trim()) return;
 
     useStore.getState().updateItem(categoryId, itemToEdit.id, {
-      title: editTitle.trim(),
-      productos: editProducts,
+      title: editType === 'list' ? editTitle.trim() : 'NOTA',
+      productos: editType === 'list' ? editProducts : [],
+      description: editType === 'note' ? editDescription.trim() : '',
+      type: editType
     });
     setIsEditModalVisible(false);
   };
@@ -204,7 +245,7 @@ export default function CategoryDetailScreen({ route, navigation }) {
         productsText += `\nTOTAL: $${total}`;
       }
 
-      const message = `📍 ${item.title.toUpperCase()}\n\n${productsText}\n\nUbicación: https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`;
+      const message = `📍 ${item.title.toUpperCase()}\n\n${item.type === 'note' ? item.description : productsText}\n\nUbicación: https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`;
       await Share.share({ message });
     } catch (error) {
       console.error(error.message);
@@ -218,7 +259,9 @@ export default function CategoryDetailScreen({ route, navigation }) {
     return (
       <View style={[styles.itemRow, { borderBottomColor: currentColors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
         <View style={[styles.itemInfo, { paddingRight: 0 }]}>
-          <Text style={[styles.itemTitle, { color: currentColors.text }]}>{item.title.toUpperCase()}</Text>
+          <Text style={[styles.itemTitle, { color: currentColors.text }]}>
+            {item.type === 'note' ? 'NOTA' : item.title.toUpperCase()}
+          </Text>
           <View style={styles.metadataRow}>
             {item.createdAt && (
               <Text style={[styles.itemDate, { color: currentColors.text }]}>
@@ -232,35 +275,57 @@ export default function CategoryDetailScreen({ route, navigation }) {
             )}
           </View>
 
+          {/* Renderizado de Nota (Texto) */}
+          {item.type === 'note' && (
+            <View style={[styles.posListContainer, { borderColor: currentColors.border }]}>
+              <Text style={{ color: currentColors.text, fontSize: 14, fontWeight: '300', fontStyle: 'italic' }}>
+                {item.description}
+              </Text>
+            </View>
+          )}
+
           {/* Renderizado de Productos (POS) */}
           {item.productos && item.productos.length > 0 && (
             <View style={[styles.posListContainer, { borderColor: currentColors.border }]}>
               {item.productos.map(p => {
                 const isMatch = query && p.nombre_producto.toLowerCase().includes(query);
+                const isExpanded = expandedProductIds.has(p.id_producto);
                 return (
-                  <View
+                  <TouchableOpacity
                     key={p.id_producto}
+                    activeOpacity={0.7}
+                    onPress={() => toggleProductExpansion(p.id_producto)}
                     style={[
                       styles.posRow,
                       isMatch && { backgroundColor: currentColors.text, paddingHorizontal: 5, marginHorizontal: -5 }
                     ]}
                   >
-                    <Text style={[styles.posName, { color: isMatch ? currentColors.background : currentColors.text }, isMatch && { fontWeight: '500' }]} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.posName,
+                        { color: isMatch ? currentColors.background : currentColors.text },
+                        isMatch && { fontWeight: '500' },
+                        isExpanded ? { maxWidth: '80%' } : { maxWidth: '50%' }
+                      ]}
+                      numberOfLines={isExpanded ? undefined : 1}
+                    >
                       {p.nombre_producto.toUpperCase()}
                     </Text>
 
                     <View style={styles.prices}>
-                      <View style={styles.dotsContainer}>
-                        <Text style={[styles.dotsText, { color: isMatch ? currentColors.background : currentColors.border }]} numberOfLines={1}>
-                          ...........
-                        </Text>
-                      </View>
+                      {!isExpanded && (
+                        <View style={styles.dotsContainer}>
+                          <Text style={[styles.dotsText, { color: isMatch ? currentColors.background : currentColors.border }]} numberOfLines={1}>
+                            ...........
+                          </Text>
+                        </View>
+                      )}
 
                       <Text style={[styles.posPrice, { color: isMatch ? currentColors.background : currentColors.text }, isMatch && { fontWeight: '500', fontSize: 16 }]}>
                         ${p.precio}
                       </Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -315,14 +380,14 @@ export default function CategoryDetailScreen({ route, navigation }) {
           <View style={styles.listHeaderContainer}>
             <TextInput
               style={[styles.searchInput, { color: currentColors.text, borderColor: currentColors.border }]}
-              placeholder="[ BUSCAR PRODUCTO... ]"
+              placeholder="[ BUSCAR PRODUCTO O NOTA... ]"
               placeholderTextColor="#9e9e9e"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             <View style={styles.sortButtonsRow}>
               <TouchableOpacity
-                onPress={() => setSortByDistance(!sortByDistance)}
+                onPress={handleToggleDistanceSort}
                 style={[styles.sortToggle, { borderColor: currentColors.border, flex: 1, marginRight: 5, backgroundColor: sortByDistance ? currentColors.text : 'transparent' }]}
               >
                 <Text style={[styles.sortToggleText, { color: sortByDistance ? currentColors.background : currentColors.text }]}>
@@ -371,94 +436,109 @@ export default function CategoryDetailScreen({ route, navigation }) {
       <BrutalistModal
         visible={isEditModalVisible}
         onClose={() => setIsEditModalVisible(false)}
-        title="EDITAR LOG"
-        scrollable={false}
+        title={editType === 'list' ? 'EDITAR LISTA' : 'EDITAR NOTA'}
+        scrollable={editType === 'list'}
         actions={[
           { title: 'CANCELAR', onPress: () => setIsEditModalVisible(false) },
           { title: 'GUARDAR', onPress: handleSaveEdit, primary: true }
         ]}
       >
-        <TextInput
-          style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
-          placeholder="NOMBRE"
-          placeholderTextColor="#9e9e9e"
-          value={editTitle}
-          onChangeText={setEditTitle}
-          autoFocus={true}
-        />
-
-        {/* Sección para añadir productos */}
-        <View style={[styles.productFormSection, { borderColor: currentColors.border }]}>
-          <Text style={[styles.productSectionTitle, { color: currentColors.text }]}>NUEVO PRODUCTO</Text>
-          <View style={styles.productInputRow}>
+        {editType === 'list' ? (
+          <>
             <TextInput
-              style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+              style={[styles.modalInput, { color: currentColors.text, borderColor: currentColors.border }]}
               placeholder="NOMBRE"
               placeholderTextColor="#9e9e9e"
-              value={editProductName}
-              onChangeText={setEditProductName}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              autoFocus={true}
             />
-            <TextInput
-              style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
-              placeholder="$ PRECIO"
-              placeholderTextColor="#9e9e9e"
-              value={editProductPrice}
-              onChangeText={setEditProductPrice}
-              keyboardType="numeric"
-            />
-          </View>
-          <TouchableOpacity
-            style={[styles.addProductBtn, { borderColor: currentColors.border, backgroundColor: currentColors.text }]}
-            onPress={handleAddProduct}
-          >
-            <Text style={[styles.addProductBtnText, { color: currentColors.background }]}>+ AÑADIR PRODUCTO</Text>
-          </TouchableOpacity>
-        </View>
 
-        {/* Lista visual de productos añadidos */}
-        {editProducts.length > 0 && (
-          <ScrollView
-            style={[styles.productsListContainer, { borderColor: currentColors.border, maxHeight: 200 }]}
-            contentContainerStyle={{ paddingBottom: 0 }}
-          >
-            {editProducts.map((prod) => (
-              <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border }]}>
+            {/* Sección para añadir productos */}
+            <View style={[styles.productFormSection, { borderColor: currentColors.border }]}>
+              <Text style={[styles.productSectionTitle, { color: currentColors.text }]}>NUEVO PRODUCTO</Text>
+              <View style={styles.productInputRow}>
                 <TextInput
-                  style={[styles.productItemNameInput, { color: currentColors.text, flex: 2 }]}
-                  value={prod.nombre_producto}
-                  onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'nombre_producto', val)}
+                  style={[styles.modalInput, styles.productNameInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
                   placeholder="NOMBRE"
                   placeholderTextColor="#9e9e9e"
+                  value={editProductName}
+                  onChangeText={setEditProductName}
                 />
-
-                {/* Dots separator */}
-                <View style={styles.dotsContainer}>
-                  <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
-                    ...
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <Text style={[{ color: currentColors.text, fontWeight: '500', fontSize: 14, textAlign: 'right' }]}>$</Text>
-                  <TextInput
-                    style={[styles.productItemPriceInput, { color: currentColors.text, minWidth: 40, textAlign: 'left' }]}
-                    value={prod.precio.toString()}
-                    onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'precio', val)}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor="#9e9e9e"
-                  />
-
-                  <TouchableOpacity
-                    style={[styles.productDeleteBtn, { borderColor: currentColors.border, marginLeft: 5 }]}
-                    onPress={() => handleRemoveProduct(prod.id_producto)}
-                  >
-                    <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
-                  </TouchableOpacity>
-                </View>
+                <TextInput
+                  style={[styles.modalInput, styles.productPriceInput, { color: currentColors.text, borderColor: currentColors.border, marginBottom: 0 }]}
+                  placeholder="$ PRECIO"
+                  placeholderTextColor="#9e9e9e"
+                  value={editProductPrice}
+                  onChangeText={setEditProductPrice}
+                  keyboardType="numeric"
+                />
               </View>
-            ))}
-          </ScrollView>
+              <TouchableOpacity
+                style={[styles.addProductBtn, { borderColor: currentColors.border, backgroundColor: currentColors.text }]}
+                onPress={handleAddProduct}
+              >
+                <Text style={[styles.addProductBtnText, { color: currentColors.background }]}>+ AÑADIR PRODUCTO</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Lista visual de productos añadidos */}
+            {editProducts.length > 0 && (
+              <ScrollView
+                style={[styles.productsListContainer, { borderColor: currentColors.border, maxHeight: 200 }]}
+                contentContainerStyle={{ paddingBottom: 0 }}
+              >
+                {editProducts.map((prod) => (
+                  <View key={prod.id_producto} style={[styles.productItemRow, { borderBottomColor: currentColors.border }]}>
+                    <TextInput
+                      style={[styles.productItemNameInput, { color: currentColors.text, flex: 2 }]}
+                      value={prod.nombre_producto}
+                      onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'nombre_producto', val)}
+                      placeholder="NOMBRE"
+                      placeholderTextColor="#9e9e9e"
+                    />
+
+                    {/* Dots separator */}
+                    <View style={styles.dotsContainer}>
+                      <Text style={[styles.dotsText, { color: currentColors.border }]} numberOfLines={1}>
+                        ...
+                      </Text>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      <Text style={[{ color: currentColors.text, fontWeight: '500', fontSize: 14, textAlign: 'right' }]}>$</Text>
+                      <TextInput
+                        style={[styles.productItemPriceInput, { color: currentColors.text, minWidth: 40, textAlign: 'left' }]}
+                        value={prod.precio.toString()}
+                        onChangeText={(val) => handleUpdateProduct(prod.id_producto, 'precio', val)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor="#9e9e9e"
+                      />
+
+                      <TouchableOpacity
+                        style={[styles.productDeleteBtn, { borderColor: currentColors.border, marginLeft: 5 }]}
+                        onPress={() => handleRemoveProduct(prod.id_producto)}
+                      >
+                        <Text style={[styles.productDeleteBtnText, { color: currentColors.text }]}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </>
+        ) : (
+          <TextInput
+            style={[styles.modalInput, styles.textArea, { color: currentColors.text, borderColor: currentColors.border }]}
+            placeholder="EDITA TU NOTA AQUÍ..."
+            placeholderTextColor="#9e9e9e"
+            value={editDescription}
+            onChangeText={setEditDescription}
+            multiline={true}
+            numberOfLines={4}
+            autoFocus={true}
+          />
         )}
       </BrutalistModal>
     </View>
